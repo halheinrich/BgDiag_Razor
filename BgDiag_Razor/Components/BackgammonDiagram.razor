@@ -1,0 +1,6 @@
+﻿@if (_svgMarkup is not null)
+{
+    <div class="bg-diagram" @attributes="AdditionalAttributes">
+        @((MarkupString)_svgMarkup)
+    </div>
+}
