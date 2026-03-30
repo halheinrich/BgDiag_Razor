@@ -26,7 +26,7 @@ Kept separate so the core library has no Blazor/Razor dependency.
 
 ## Umbrella
 - Repo: `halheinrich/backgammon`
-- Commit: `2dc43aa`
+- Commit: `2e4fece`
 - AGENTS.md lives at umbrella root — this project references it, does not keep its own copy.
 
 ## Component API
@@ -42,12 +42,13 @@ Kept separate so the core library has no Blazor/Razor dependency.
 
 ### Source file URLs
 ```
-https://raw.githack.com/halheinrich/BgDiag_Razor/0172180/BgDiag_Razor/Components/BackgammonDiagram.razor
-https://raw.githack.com/halheinrich/BgDiag_Razor/0172180/BgDiag_Razor/Components/BackgammonDiagram.razor.cs
-https://raw.githack.com/halheinrich/BgDiag_Razor/0172180/BgDiag_Razor.Tests/BackgammonDiagramTests.cs
+https://raw.githack.com/halheinrich/BgDiag_Razor/6b0a447/BgDiag_Razor/Components/BackgammonDiagram.razor
+https://raw.githack.com/halheinrich/BgDiag_Razor/6b0a447/BgDiag_Razor/Components/BackgammonDiagram.razor.cs
+https://raw.githack.com/halheinrich/BgDiag_Razor/6b0a447/BgDiag_Razor.Tests/BackgammonDiagramTests.cs
 ```
 
 ## Commit log
 | Date | Hash | Summary |
 |------|------|---------|
-| 2026-03-29 | `0172180` | Initial scaffold: BackgammonDiagram component, bunit tests |
+| 2026-03-29 | `6b0a447` | Initial scaffold: BackgammonDiagram component, bunit tests |
+| 2026-03-30 | `6b0a447` | Wire click overlay: hit regions, EventCallbacks, bUnit tests |
