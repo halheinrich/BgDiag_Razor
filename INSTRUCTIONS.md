@@ -16,11 +16,13 @@ Kept separate so the core library has no Blazor/Razor dependency.
 - Razor Class Library (`Microsoft.NET.Sdk.Razor`)
 - Visual Studio 2026
 
-## Dependencies
+  ## Dependencies
 - **BackgammonDiagram_Lib** — referenced as a project dependency
-  - Commit: `09fd31e` (code) / `670f767` (latest)
-  - Key types consumed: `DiagramRequest`, `DiagramOptions`, `DiagramRenderer`
-  - API entry point: `string DiagramRenderer.RenderSvg(DiagramRequest request, DiagramOptions options)`
+  - Commit: `8372121`
+  - Key types consumed: `DiagramRequest`, `DiagramOptions`, `DiagramRenderer`, `BoardHitRegions`, `SvgViewBox`, `HitRect`
+  - API entry points:
+    - `string DiagramRenderer.RenderSvg(DiagramRequest request, DiagramOptions options)`
+    - `BoardHitRegions DiagramRenderer.GetHitRegions(DiagramOptions options)`
 
 ## Umbrella
 - Repo: `halheinrich/backgammon`

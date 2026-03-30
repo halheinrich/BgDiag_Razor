@@ -1,6 +1,41 @@
 ﻿@if (_svgMarkup is not null)
 {
-    <div class="bg-diagram" @attributes="AdditionalAttributes">
-        @((MarkupString)_svgMarkup)
+    <div class="bg-diagram" style="position: relative;" @attributes="AdditionalAttributes">
+        <div style="pointer-events: none;">
+            @((MarkupString)_svgMarkup)
+        </div>
+        @if (_hitRegions is not null)
+        {
+            <svg xmlns="http://www.w3.org/2000/svg"
+                 viewBox="@($"{_hitRegions.ViewBox.X} {_hitRegions.ViewBox.Y} {_hitRegions.ViewBox.Width} {_hitRegions.ViewBox.Height}")"
+                 style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;">
+                @foreach (var kvp in _hitRegions.Points)
+                {
+                    var pt = kvp.Key;
+                    var r = kvp.Value;
+                    <rect x="@r.X" y="@r.Y" width="@r.Width" height="@r.Height"
+                          fill="transparent" pointer-events="all"
+                          @onclick="() => OnPointClicked.InvokeAsync(pt)" />
+                }
+                @{
+                    var bar = _hitRegions.Bar;
+                }
+                <rect x="@bar.X" y="@bar.Y" width="@bar.Width" height="@bar.Height"
+                      fill="transparent" pointer-events="all"
+                      @onclick="() => OnBarClicked.InvokeAsync(25)" />
+                @if (_hitRegions.Cube is { } cube)
+                {
+                    <rect x="@cube.X" y="@cube.Y" width="@cube.Width" height="@cube.Height"
+                          fill="transparent" pointer-events="all"
+                          @onclick="OnCubeClicked" />
+                }
+                @if (_hitRegions.OnRollTray is { } tray)
+                {
+                    <rect x="@tray.X" y="@tray.Y" width="@tray.Width" height="@tray.Height"
+                          fill="transparent" pointer-events="all"
+                          @onclick="OnTrayClicked" />
+                }
+            </svg>
+        }
     </div>
 }

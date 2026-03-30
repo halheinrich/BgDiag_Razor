@@ -17,21 +17,24 @@ public partial class BackgammonDiagram : ComponentBase
     public DiagramOptions Options { get; set; } = new();
 
     // -----------------------------------------------------------------------
-    //  Interactivity contract (not yet wired to SVG elements)
+    //  Interactivity — wired to transparent click overlay
     // -----------------------------------------------------------------------
 
-    /// <summary>
-    /// Fired when a board point is clicked. The int is the point number (1-24),
-    /// 0 for opponent bar, 25 for on-roll bar.
-    /// </summary>
+    /// <summary>Fired when a board point is clicked. Returns 1–24.</summary>
     [Parameter]
     public EventCallback<int> OnPointClicked { get; set; }
 
-    /// <summary>
-    /// Fired when a cube action area is clicked.
-    /// </summary>
+    /// <summary>Fired when the bar is clicked. Returns 25.</summary>
     [Parameter]
-    public EventCallback OnCubeActionClicked { get; set; }
+    public EventCallback<int> OnBarClicked { get; set; }
+
+    /// <summary>Fired when the cube area is clicked.</summary>
+    [Parameter]
+    public EventCallback OnCubeClicked { get; set; }
+
+    /// <summary>Fired when the on-roll player's bearing-off tray is clicked.</summary>
+    [Parameter]
+    public EventCallback OnTrayClicked { get; set; }
 
     // -----------------------------------------------------------------------
     //  Catch-all for arbitrary HTML attributes (e.g. style, id, class)
@@ -45,6 +48,7 @@ public partial class BackgammonDiagram : ComponentBase
     // -----------------------------------------------------------------------
 
     private string? _svgMarkup;
+    private BoardHitRegions? _hitRegions;
     private DiagramRenderer _renderer = new();
 
     // -----------------------------------------------------------------------
@@ -56,9 +60,11 @@ public partial class BackgammonDiagram : ComponentBase
         if (Request is null)
         {
             _svgMarkup = null;
+            _hitRegions = null;
             return;
         }
 
         _svgMarkup = _renderer.RenderSvg(Request, Options);
+        _hitRegions = _renderer.GetHitRegions(Options);
     }
 }
