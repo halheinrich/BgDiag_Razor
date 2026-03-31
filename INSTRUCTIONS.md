@@ -42,9 +42,9 @@ Kept separate so the core library has no Blazor/Razor dependency.
 
 ### Source file URLs
 ```
-https://raw.githack.com/halheinrich/BgDiag_Razor/3c521c9/BgDiag_Razor/Components/BackgammonDiagram.razor
-https://raw.githack.com/halheinrich/BgDiag_Razor/3c521c9/BgDiag_Razor/Components/BackgammonDiagram.razor.cs
-https://raw.githack.com/halheinrich/BgDiag_Razor/3c521c9/BgDiag_Razor.Tests/BackgammonDiagramTests.cs
+https://raw.githack.com/halheinrich/BgDiag_Razor/15e8d93/BgDiag_Razor/Components/BackgammonDiagram.razor
+https://raw.githack.com/halheinrich/BgDiag_Razor/15e8d93/BgDiag_Razor/Components/BackgammonDiagram.razor.cs
+https://raw.githack.com/halheinrich/BgDiag_Razor/15e8d93/BgDiag_Razor.Tests/BackgammonDiagramTests.cs
 ```
 
 ## Commit log
@@ -53,3 +53,4 @@ https://raw.githack.com/halheinrich/BgDiag_Razor/3c521c9/BgDiag_Razor.Tests/Back
 | 2026-03-29 | `6b0a447` | Initial scaffold: BackgammonDiagram component, bunit tests |
 | 2026-03-30 | `6b0a447` | Wire click overlay: hit regions, EventCallbacks, bUnit tests |
 | 2026-03-31 | '3c521c9  | Fix GetHitRegions call site to pass Request; add orientation regression test
+| 2026-03-31 | `15e8d93` | Fix DiagramRequest construction: replace object initializer and with-expressions with Builder pattern
