@@ -65,6 +65,6 @@ public partial class BackgammonDiagram : ComponentBase
         }
 
         _svgMarkup = _renderer.RenderSvg(Request, Options);
-        _hitRegions = _renderer.GetHitRegions(Options);
+        _hitRegions = _renderer.GetHitRegions(Request, Options);
     }
 }

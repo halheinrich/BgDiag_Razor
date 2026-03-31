@@ -157,4 +157,31 @@ public class BackgammonDiagramTests : BunitContext
         await rects[25].ClickAsync(new Microsoft.AspNetCore.Components.Web.MouseEventArgs());
         Assert.True(cubeFired);
     }
+
+    // -----------------------------------------------------------------------
+    //  Orientation tests
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public void HitRegions_PointOne_DiffersWhenHomeBoardOnRight_IsToggled()
+    {
+        var requestDefault = DefaultRequest with { HomeBoardOnRight = true };
+        var requestFlipped = DefaultRequest with { HomeBoardOnRight = false };
+
+        var cutDefault = Render<BackgammonDiagram>(p => p
+            .Add(p => p.Request, requestDefault)
+            .Add(p => p.Options, new DiagramOptions()));
+
+        var cutFlipped = Render<BackgammonDiagram>(p => p
+            .Add(p => p.Request, requestFlipped)
+            .Add(p => p.Options, new DiagramOptions()));
+
+        var rectsDefault = cutDefault.FindAll("rect[fill='transparent'][pointer-events='all']");
+        var rectsFlipped = cutFlipped.FindAll("rect[fill='transparent'][pointer-events='all']");
+
+        var xDefault = rectsDefault[0].GetAttribute("x");
+        var xFlipped = rectsFlipped[0].GetAttribute("x");
+
+        Assert.NotEqual(xDefault, xFlipped);
+    }
 }
