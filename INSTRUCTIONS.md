@@ -18,7 +18,7 @@ Kept separate so the core library has no Blazor/Razor dependency.
 
   ## Dependencies
 - **BackgammonDiagram_Lib** — referenced as a project dependency
-  - Commit: `8372121`
+  - Commit: `01432a7`
   - Key types consumed: `DiagramRequest`, `DiagramOptions`, `DiagramRenderer`, `BoardHitRegions`, `SvgViewBox`, `HitRect`
   - API entry points:
     - `string DiagramRenderer.RenderSvg(DiagramRequest request, DiagramOptions options)`
@@ -42,9 +42,9 @@ Kept separate so the core library has no Blazor/Razor dependency.
 
 ### Source file URLs
 ```
-https://raw.githack.com/halheinrich/BgDiag_Razor/6b0a447/BgDiag_Razor/Components/BackgammonDiagram.razor
-https://raw.githack.com/halheinrich/BgDiag_Razor/6b0a447/BgDiag_Razor/Components/BackgammonDiagram.razor.cs
-https://raw.githack.com/halheinrich/BgDiag_Razor/6b0a447/BgDiag_Razor.Tests/BackgammonDiagramTests.cs
+https://raw.githack.com/halheinrich/BgDiag_Razor/3c521c9/BgDiag_Razor/Components/BackgammonDiagram.razor
+https://raw.githack.com/halheinrich/BgDiag_Razor/3c521c9/BgDiag_Razor/Components/BackgammonDiagram.razor.cs
+https://raw.githack.com/halheinrich/BgDiag_Razor/3c521c9/BgDiag_Razor.Tests/BackgammonDiagramTests.cs
 ```
 
 ## Commit log
@@ -52,3 +52,4 @@ https://raw.githack.com/halheinrich/BgDiag_Razor/6b0a447/BgDiag_Razor.Tests/Back
 |------|------|---------|
 | 2026-03-29 | `6b0a447` | Initial scaffold: BackgammonDiagram component, bunit tests |
 | 2026-03-30 | `6b0a447` | Wire click overlay: hit regions, EventCallbacks, bUnit tests |
+| 2026-03-31 | '3c521c9  | Fix GetHitRegions call site to pass Request; add orientation regression test
