@@ -6,7 +6,8 @@ namespace BgDiag_Razor.Tests;
 
 public class BackgammonDiagramTests : BunitContext
 {
-    private static DiagramRequest DefaultRequest => new()
+    private static DiagramRequest DefaultRequest =>
+    new DiagramRequest.Builder
     {
         Mop = [0, 2, 0, 0, 0, 0, -5, 0, -3, 0, 0, 0, 5, -5, 0, 0, 0, 3, 0, 5, 0, 0, 0, 0, -2, 0],
         OnRollName = "Player",
@@ -14,7 +15,7 @@ public class BackgammonDiagramTests : BunitContext
         Dice = [3, 1],
         CubeSize = 1,
         CubeOwner = CubeOwner.Centered,
-    };
+    }.Build();
 
     // -----------------------------------------------------------------------
     //  Existing tests (preserved)
@@ -165,8 +166,26 @@ public class BackgammonDiagramTests : BunitContext
     [Fact]
     public void HitRegions_PointOne_DiffersWhenHomeBoardOnRight_IsToggled()
     {
-        var requestDefault = DefaultRequest with { HomeBoardOnRight = true };
-        var requestFlipped = DefaultRequest with { HomeBoardOnRight = false };
+        var requestDefault = new DiagramRequest.Builder
+        {
+            Mop = [0, 2, 0, 0, 0, 0, -5, 0, -3, 0, 0, 0, 5, -5, 0, 0, 0, 3, 0, 5, 0, 0, 0, 0, -2, 0],
+            OnRollName = "Player",
+            OpponentName = "Opponent",
+            Dice = [3, 1],
+            CubeSize = 1,
+            CubeOwner = CubeOwner.Centered,
+            HomeBoardOnRight = true,
+        }.Build();
+        var requestFlipped = new DiagramRequest.Builder
+        {
+            Mop = [0, 2, 0, 0, 0, 0, -5, 0, -3, 0, 0, 0, 5, -5, 0, 0, 0, 3, 0, 5, 0, 0, 0, 0, -2, 0],
+            OnRollName = "Player",
+            OpponentName = "Opponent",
+            Dice = [3, 1],
+            CubeSize = 1,
+            CubeOwner = CubeOwner.Centered,
+            HomeBoardOnRight = false,
+        }.Build();
 
         var cutDefault = Render<BackgammonDiagram>(p => p
             .Add(p => p.Request, requestDefault)
