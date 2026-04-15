@@ -36,3 +36,6 @@ Thumbs.db
 # Local scratch file
 /h.h
 h.h
+
+# Claude Code session state
+.claude/
