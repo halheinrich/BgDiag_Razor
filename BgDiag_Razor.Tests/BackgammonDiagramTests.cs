@@ -1,6 +1,7 @@
 ﻿using Bunit;
 using BgDiag_Razor.Components;
 using BackgammonDiagram_Lib;
+using BgDataTypes_Lib;
 
 namespace BgDiag_Razor.Tests;
 
