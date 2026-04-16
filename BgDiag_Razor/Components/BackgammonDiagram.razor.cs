@@ -49,7 +49,6 @@ public partial class BackgammonDiagram : ComponentBase
 
     private string? _svgMarkup;
     private BoardHitRegions? _hitRegions;
-    private DiagramRenderer _renderer = new();
 
     // -----------------------------------------------------------------------
     //  Lifecycle
@@ -64,7 +63,7 @@ public partial class BackgammonDiagram : ComponentBase
             return;
         }
 
-        _svgMarkup = _renderer.RenderSvg(Request, Options);
-        _hitRegions = _renderer.GetHitRegions(Request, Options);
+        _svgMarkup = DiagramRenderer.RenderSvg(Request, Options);
+        _hitRegions = DiagramRenderer.GetHitRegions(Request, Options);
     }
 }

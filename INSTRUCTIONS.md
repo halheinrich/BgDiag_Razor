@@ -51,15 +51,16 @@ and surfaces click events.
 ### Render pipeline
 
 `BackgammonDiagram` is a `ComponentBase` with `[Parameter]` `Request` (nullable
-`DiagramRequest`) and `Options` (`DiagramOptions`, defaulted). A private
-`DiagramRenderer` instance is held as a field and reused across renders.
+`DiagramRequest`) and `Options` (`DiagramOptions`, defaulted). `DiagramRenderer`
+is a static class in the lib, so rendering is a direct static call — the
+component holds no renderer state, only the cached outputs.
 
 `OnParametersSet` is the single render hook:
 
 - If `Request` is null, both `_svgMarkup` and `_hitRegions` are cleared and
   the component renders nothing.
-- Otherwise, it calls `_renderer.RenderSvg(Request, Options)` and
-  `_renderer.GetHitRegions(Request, Options)` and caches both in fields.
+- Otherwise, it calls `DiagramRenderer.RenderSvg(Request, Options)` and
+  `DiagramRenderer.GetHitRegions(Request, Options)` and caches both in fields.
 
 The markup then injects `_svgMarkup` via `(MarkupString)_svgMarkup` inside a
 child `div` that has `pointer-events: none` so clicks fall through to the
