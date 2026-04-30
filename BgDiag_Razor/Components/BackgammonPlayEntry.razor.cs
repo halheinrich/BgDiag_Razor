@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Components;
 using BackgammonDiagram_Lib;
+using BgDataTypes_Lib;
 using BgMoveGen;
 
 namespace BgDiag_Razor.Components;

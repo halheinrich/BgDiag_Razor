@@ -16,6 +16,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\BackgammonDiagram_Lib\BackgammonDiagram_Lib\BackgammonDiagram_Lib.csproj" />
+    <ProjectReference Include="..\..\BgDataTypes_Lib\BgDataTypes_Lib\BgDataTypes_Lib.csproj" />
     <ProjectReference Include="..\..\BgMoveGen\BgMoveGen\BgMoveGen.csproj" />
   </ItemGroup>
 

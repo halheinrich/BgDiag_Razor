@@ -22,11 +22,17 @@ https://github.com/halheinrich/BgDiag_Razor — branch `main`.
 - **BackgammonDiagram_Lib** — `DiagramRequest`, `DiagramOptions`,
   `DiagramRenderer`, `BoardHitRegions`, `SvgViewBox`, `HitRect`. Referenced
   as a project reference, not a package.
-- **BgMoveGen** — `MoveEntryState`, `BoardState`, `Play`, `Move`,
-  `ClickOutcome`. Drives `BackgammonPlayEntry`'s click-by-click play
-  assembly. Referenced as a project reference. Transitively brings
-  `BgMoveGen`'s standalone surface; this subproject does not consume the
-  NativeAOT interop layer.
+- **BgDataTypes_Lib** — `BoardState`, `Play`, `Move`, `CubeOwner`. Move
+  primitives and the mutable board live in the shared-data layer; consumed
+  here by `BackgammonPlayEntry` (`Play` on the public surface,
+  `BoardState.FromMop` for state construction) and by tests. Referenced as
+  a project reference (also reachable transitively via BackgammonDiagram_Lib
+  and BgMoveGen, but the explicit ref documents the direct dependency and
+  insulates against future transitive-edge churn).
+- **BgMoveGen** — `MoveEntryState`, `ClickOutcome`. Drives
+  `BackgammonPlayEntry`'s click-by-click play assembly. Referenced as a
+  project reference. Transitively brings `BgMoveGen`'s standalone surface;
+  this subproject does not consume the NativeAOT interop layer.
 
 ## Directory tree
 
