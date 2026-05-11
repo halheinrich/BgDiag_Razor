@@ -22,19 +22,22 @@ https://github.com/halheinrich/BgDiag_Razor — branch `main`.
 - **BackgammonDiagram_Lib** — `DiagramRequest`, `DiagramOptions`,
   `DiagramRenderer`, `BoardHitRegions`, `SvgViewBox`, `HitRect`. Referenced
   as a project reference, not a package.
-- **BgDataTypes_Lib** — `BoardState`, `Play`, `Move`, `CubeOwner`. Move
-  primitives and the mutable board live in the shared-data layer; consumed
-  here by `BackgammonPlayEntry` (`Play` on the public surface,
-  `BoardState.FromMop` for state construction) and by tests. Referenced as
-  a project reference (also reachable transitively via BackgammonDiagram_Lib
-  and BgMoveGen, but the explicit ref documents the direct dependency and
-  insulates against future transitive-edge churn).
+- **BgDataTypes_Lib** — `BoardState` (class), `Play` (struct), `Move`
+  (readonly record struct), `CubeOwner` (enum). Move primitives and the
+  mutable board live in the shared-data layer; consumed here by
+  `BackgammonPlayEntry` (`Play` on the public surface, `BoardState.FromMop`
+  for state construction) and by tests. Referenced as a project reference
+  (also reachable transitively via BackgammonDiagram_Lib and BgMoveGen, but
+  the explicit ref documents the direct dependency and insulates against
+  future transitive-edge churn).
 - **BgMoveGen** — `MoveEntryState`, `ClickOutcome`. Drives
   `BackgammonPlayEntry`'s click-by-click play assembly. Referenced as a
   project reference. Transitively brings `BgMoveGen`'s standalone surface;
   this subproject does not consume the NativeAOT interop layer.
 
 ## Directory tree
+
+Source-only — excludes `.gitignore`, `.github/`, and build artifacts.
 
 ```
 BgDiag_Razor.slnx
@@ -117,11 +120,11 @@ the matching `EventCallback`:
 The overlay is the second child of the outer wrapper so it sits above the
 pointer-events-disabled diagram in stacking order.
 
-### Catch-all attributes
+### Catch-all attributes — BackgammonDiagram
 
 `[Parameter(CaptureUnmatchedValues = true)] Dictionary<string, object>? AdditionalAttributes`
-is splatted onto the outer wrapper `div` via `@attributes`, so consumers can
-pass `style`, `id`, `class`, etc. without modifying the component.
+is splatted onto the outer `bg-diagram` wrapper `div` via `@attributes`, so
+consumers can pass `style`, `id`, `class`, etc. without modifying the component.
 
 ### BackgammonPlayEntry — render pipeline
 
@@ -140,6 +143,13 @@ Internally:
   through `_state.TryAddClick(...)` and rebuild `_renderedRequest` on any
   outcome other than `Illegal`. `PlayCompleted` fires `OnPlayCompleted`.
 
+`AdditionalAttributes` is splatted onto BackgammonPlayEntry's own outer
+`bg-play-entry` wrapper `div` — a separate wrapper above the inner
+`BackgammonDiagram`'s `bg-diagram` wrapper, not the same element. Consumers
+that style the play-entry widget target `bg-play-entry`; the inner diagram's
+splat surface is reached via the inner component's own parameter, which
+this component does not forward.
+
 ### Reset semantics — value equality on `(Mop, Dice)`
 
 A fresh `MoveEntryState` is constructed only when the incoming `Request`'s
@@ -157,8 +167,10 @@ problem unambiguously resets.
 
 Cube decisions (signalled by `Decision.IsCube == true`) are not handled by
 `BackgammonPlayEntry`. `OnParametersSet` throws `NotImplementedException`
-naming the future cube-entry sibling component. The point is to fail loud at
-the contract boundary rather than silently render an unusable widget.
+pointing at the unimplemented cube-entry sibling pattern (the message
+describes the pattern but does not name a specific type). The point is to
+fail loud at the contract boundary rather than silently render an unusable
+widget.
 
 ### Click index conventions
 
