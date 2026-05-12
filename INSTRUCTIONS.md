@@ -115,12 +115,13 @@ the matching `EventCallback`:
   the point index (1–24).
 - `Bar` → invokes `OnBarClicked(25)`.
 - `Cube` (nullable) → invokes `OnCubeClicked`.
-- `OnRollTray` (nullable) → invokes `OnTrayClicked`.
+- `OnRollTray` (the on-roll player's bearing-off tray, nullable) → invokes
+  `OnTrayClicked`.
 
 The overlay is the second child of the outer wrapper so it sits above the
 pointer-events-disabled diagram in stacking order.
 
-### Catch-all attributes — BackgammonDiagram
+### BackgammonDiagram — catch-all attributes
 
 `[Parameter(CaptureUnmatchedValues = true)] Dictionary<string, object>? AdditionalAttributes`
 is splatted onto the outer `bg-diagram` wrapper `div` via `@attributes`, so
@@ -143,7 +144,7 @@ Internally:
   through `_state.TryAddClick(...)` and rebuild `_renderedRequest` on any
   outcome other than `Illegal`. `PlayCompleted` fires `OnPlayCompleted`.
 
-`AdditionalAttributes` is splatted onto BackgammonPlayEntry's own outer
+`AdditionalAttributes` is splatted onto `BackgammonPlayEntry`'s own outer
 `bg-play-entry` wrapper `div` — a separate wrapper above the inner
 `BackgammonDiagram`'s `bg-diagram` wrapper, not the same element. Consumers
 that style the play-entry widget target `bg-play-entry`; the inner diagram's
@@ -158,19 +159,18 @@ previously cached pair. Re-passing a request with the same starting position
 and dice — even a distinct object reference — preserves any in-progress
 click state. Different starting position or dice triggers a reset.
 
-This decouples reset behaviour from object identity: consumers can rebuild a
+This decouples reset behavior from object identity: consumers can rebuild a
 `DiagramRequest` for any reason (parent-state churn, attribute change, etc.)
 without losing mid-click progress, while genuinely advancing to a new
 problem unambiguously resets.
 
 ### Cube-decision guard
 
-Cube decisions (signalled by `Decision.IsCube == true`) are not handled by
-`BackgammonPlayEntry`. `OnParametersSet` throws `NotImplementedException`
-pointing at the unimplemented cube-entry sibling pattern (the message
-describes the pattern but does not name a specific type). The point is to
-fail loud at the contract boundary rather than silently render an unusable
-widget.
+Cube decisions (signaled by `Decision.IsCube == true`) are not handled by
+`BackgammonPlayEntry`. `OnParametersSet` throws `NotImplementedException`;
+the message describes the planned cube-entry sibling pattern without naming
+a specific type. The intent is to fail loudly at the contract boundary
+rather than silently render an unusable widget.
 
 ### Click index conventions
 
@@ -239,12 +239,12 @@ Both components live in namespace `BgDiag_Razor.Components`.
   selections; allowed even after completion (consumer can expose this as
   "redo from start").
 
-## Pitfalls — BackgammonPlayEntry
+## BackgammonPlayEntry — pitfalls
 
 - **Reset key is value-equality on `(Mop, Dice)`, not reference identity.**
   Tests and consumers must rebuild a `DiagramRequest` with a *different*
   starting position or dice to force a reset. Re-passing the same logical
-  problem — even a freshly-built request instance — does not reset state.
+  problem — even a freshly built request instance — does not reset state.
 - **`UndoLast` / `UndoAll` invoke `StateHasChanged`** which requires the
   Blazor Dispatcher. Real consumers (button click handlers) are already on
   the Dispatcher; bUnit tests must wrap the call in `cut.InvokeAsync(...)`.
@@ -260,11 +260,11 @@ Both components live in namespace `BgDiag_Razor.Components`.
   `BackgammonDiagram` always wires it) but `BackgammonPlayEntry` does not
   subscribe; cube-area clicks during play entry are no-ops by design.
 
-## Pitfalls — BackgammonDiagram
+## BackgammonDiagram — pitfalls
 
 - **Overlay viewBox must match the lib's SVG.** The overlay is sized from
   `BoardHitRegions.ViewBox` so hit rects align with the rendered diagram. If
-  the lib's view box ever diverges from what `GetHitRegions` reports, clicks
+  the lib's viewBox ever diverges from what `GetHitRegions` reports, clicks
   will land on the wrong elements. Keep both coming from the same source.
 - **Inner diagram needs `pointer-events: none`.** The rendered lib SVG sits
   underneath the overlay in a `<div style="pointer-events: none">`. Removing
@@ -276,7 +276,7 @@ Both components live in namespace `BgDiag_Razor.Components`.
   come from DOM order, not CSS positioning alone.
 - **`GetHitRegions` needs `Request`, not just `Options`.** Orientation and
   on-roll tray positioning depend on match state, not just the option set.
-  `OnParametersSet` passes both; don't "optimise" by caching hit regions
+  `OnParametersSet` passes both; don't "optimize" by caching hit regions
   keyed on options alone.
 - **`MarkupString` is trusted-output-only.** The SVG injected via
   `(MarkupString)_svgMarkup` is produced by `BackgammonDiagram_Lib` and is
