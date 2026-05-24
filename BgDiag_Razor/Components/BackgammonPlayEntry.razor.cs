@@ -33,7 +33,8 @@ namespace BgDiag_Razor.Components;
 /// <b>Cube decisions</b> (signalled by <c>Decision.IsCube == true</c>; in the data
 /// layer this also coincides with <c>Dice == [0, 0]</c>) are not supported by this
 /// component; constructing one throws <see cref="NotImplementedException"/>.
-/// Cube decisions belong to a separate sibling component (not yet implemented).
+/// Route cube decisions to <see cref="BackgammonCubeEntry"/>, the sibling component
+/// that owns the cube path.
 /// </para>
 ///
 /// <para>
@@ -105,7 +106,7 @@ public partial class BackgammonPlayEntry : ComponentBase
         {
             throw new NotImplementedException(
                 "Cube decisions are not handled by BackgammonPlayEntry. " +
-                "Route cube decisions to a dedicated cube-entry component (not yet implemented).");
+                "Route cube decisions to BackgammonCubeEntry.");
         }
 
         var mop = Request.Position.Mop;

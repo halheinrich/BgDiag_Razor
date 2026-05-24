@@ -35,6 +35,10 @@ https://github.com/halheinrich/BgDiag_Razor — branch `main`.
   project reference. Transitively brings `BgMoveGen`'s standalone surface;
   this subproject does not consume the NativeAOT interop layer.
 
+`BackgammonCubeEntry` additionally consumes `CubeVerdict` from
+`BgDataTypes_Lib` for its verdict-button surface. No `BgMoveGen` use — cube
+decisions have no checker-move state to drive.
+
 ## Directory tree
 
 Source-only — excludes `.gitignore`, `.github/`, and build artifacts.
@@ -49,11 +53,14 @@ BgDiag_Razor/
     BackgammonDiagram.razor.cs        — code-behind, parameters, lifecycle
     BackgammonPlayEntry.razor         — wraps BackgammonDiagram, drives state
     BackgammonPlayEntry.razor.cs      — code-behind, parameters, click routing
+    BackgammonCubeEntry.razor         — wraps BackgammonDiagram, verdict buttons
+    BackgammonCubeEntry.razor.cs      — code-behind, parameters, verdict routing
   wwwroot/
 BgDiag_Razor.Tests/
   BgDiag_Razor.Tests.csproj
   BackgammonDiagramTests.cs           — bUnit rendering + event-callback tests
   BackgammonPlayEntryTests.cs         — bUnit play-entry contract tests
+  BackgammonCubeEntryTests.cs         — bUnit cube-entry contract tests
 ```
 
 ## Architecture
@@ -65,7 +72,7 @@ Blazor / Razor dependency. All SVG generation and hit-region geometry lives
 in the core lib; this project only binds that output into a Blazor component
 and surfaces click events.
 
-### Two components: view-only vs stateful
+### Three components: view-only, play-entry, cube-entry
 
 `BackgammonDiagram` is the **view-only primitive** — given a `DiagramRequest`
 it renders the position and surfaces click events. It holds no
@@ -76,13 +83,19 @@ playback, analytics inspection) use it directly.
 `BackgammonDiagram` and drives a `BgMoveGen.MoveEntryState` from its click
 events, rebuilding the displayed `Mop` from the intermediate position after
 each legal click and reporting the assembled `Play` once the user has
-clicked a complete legal sequence. Quiz / interactive consumers
-(`BgQuiz_Blazor` Phase 1) use this.
+clicked a complete legal sequence. Handles play decisions only
+(`Decision.IsCube == false`); cube decisions throw at the contract boundary.
+
+`BackgammonCubeEntry` is the **cube-entry sibling** to `BackgammonPlayEntry`
+— it composes `BackgammonDiagram` and presents the four `CubeVerdict`
+options as buttons, firing `EventCallback<CubeVerdict>` on selection.
+Handles cube decisions only (`Decision.IsCube == true`); play decisions
+throw at the contract boundary. Consumers route by `Decision.IsCube`.
 
 The split keeps the encapsulation rule clean: a consumer that just wants to
 display a position should not pay for click-by-click state machinery, and a
-consumer that wants click-by-click play entry should not have to wire state
-externally to a view-only component.
+consumer driving an interactive decision should not have to wire state
+externally to a view-only component or branch internally on cube vs play.
 
 ### Render pipeline
 
@@ -167,10 +180,52 @@ problem unambiguously resets.
 ### Cube-decision guard
 
 Cube decisions (signaled by `Decision.IsCube == true`) are not handled by
-`BackgammonPlayEntry`. `OnParametersSet` throws `NotImplementedException`;
-the message describes the planned cube-entry sibling pattern without naming
-a specific type. The intent is to fail loudly at the contract boundary
-rather than silently render an unusable widget.
+`BackgammonPlayEntry`. `OnParametersSet` throws `NotImplementedException`
+naming `BackgammonCubeEntry` as the correct sibling. The intent is to fail
+loudly at the contract boundary rather than silently render an unusable
+widget. `BackgammonCubeEntry` carries the symmetric guard — play decisions
+throw on it.
+
+### BackgammonCubeEntry — render pipeline
+
+`BackgammonCubeEntry` takes the same `DiagramRequest` / `DiagramOptions`
+shape as `BackgammonPlayEntry` plus an `EventCallback<CubeVerdict>
+OnCubeVerdictCompleted`. The composition is structurally simpler:
+
+- The inner `BackgammonDiagram` receives `Request` unchanged — cube
+  decisions do not transform the position, so there is no Mop rebuilding
+  step and no `_renderedRequest` cache.
+- No `MoveEntryState`, no `BgMoveGen` dependency. The component holds no
+  in-progress sub-state.
+- Four `<button class="bg-cube-verdict">` elements — one per
+  `CubeVerdict` member — render alongside the inner diagram inside the
+  `bg-cube-entry` wrapper. Clicking a button invokes
+  `OnCubeVerdictCompleted` with the matching enum value.
+
+The `(verdict, button label)` mapping is a private static table in the
+code-behind. Single-sourced for now; if a second consumer ever needs the
+same labels, lift to a shared helper at that point.
+
+`AdditionalAttributes` is splatted onto `BackgammonCubeEntry`'s own outer
+`bg-cube-entry` wrapper `div`, parallel to `BackgammonPlayEntry`'s
+`bg-play-entry` wrapper. Consumers that style the cube-entry widget
+target `bg-cube-entry`; the verdict-button row is `bg-cube-entry-verdicts`.
+
+### BackgammonCubeEntry — fire-on-select, no internal lock
+
+Each verdict-button click immediately invokes
+`OnCubeVerdictCompleted(verdict)`. The component has no provisional
+"selected but not yet committed" state, no confirm step, no internal
+"completed" lock, and no imperative undo. Subsequent clicks fire the
+callback again; the consumer decides what to do (most quiz consumers
+navigate away on the first callback, making re-selection moot).
+
+The reasoning parallels `BackgammonPlayEntry`'s "complete legal sequence
+fires" model — a single verdict button click is a complete cube action,
+just as the last checker-play click is a complete play. Misclick safety
+can be layered on later as a `RequireConfirm` parameter if a real
+consumer needs it; building it in speculatively would add `_selectedVerdict`
+state and a separate confirm-button surface for no current caller.
 
 ### Click index conventions
 
@@ -190,11 +245,16 @@ primitive (markup, hit-region overlay, callback wiring). `BackgammonPlayEntryTes
 cover the play-entry contract: legal-completion firing, illegal no-ops,
 post-completion no-ops, undo round-trip via replay, value-equality reset on
 `(Mop, Dice)` change, identity preservation on equal `(Mop, Dice)`,
-cube-decision rejection.
+cube-decision rejection. `BackgammonCubeEntryTests` cover the cube-entry
+contract: render shape (inner diagram + four verdict buttons), null-request
+empty render, splat surface, play-decision rejection (symmetric guard),
+verdict-button click fires `OnCubeVerdictCompleted` with the matching
+`CubeVerdict` enum value (parameterized over all four members), and
+re-selection fires multiple times (no internal one-shot lock).
 
 ## Public API
 
-Both components live in namespace `BgDiag_Razor.Components`.
+All three components live in namespace `BgDiag_Razor.Components`.
 
 ### `BackgammonDiagram`
 
@@ -239,6 +299,26 @@ Both components live in namespace `BgDiag_Razor.Components`.
   selections; allowed even after completion (consumer can expose this as
   "redo from start").
 
+### `BackgammonCubeEntry`
+
+**Parameters:**
+
+- `DiagramRequest? Request` (required) — the cube decision to render and
+  accept a verdict against. Null renders nothing. Play decisions
+  (`Decision.IsCube == false`) throw `NotImplementedException`.
+- `DiagramOptions Options` — forwarded to the inner diagram.
+- `Dictionary<string, object>? AdditionalAttributes` — splatted onto the
+  outer wrapper `div` (`bg-cube-entry`). Not forwarded to the inner diagram.
+
+**EventCallbacks:**
+
+- `EventCallback<CubeVerdict> OnCubeVerdictCompleted` — fires on every
+  verdict-button click, carrying the selected `CubeVerdict`. No internal
+  one-shot lock; the consumer decides whether subsequent clicks matter.
+
+**Imperative methods:** none. Cube verdicts have no sub-state worth rolling
+back, so the play-entry-style `UndoLast` / `UndoAll` does not apply.
+
 ## BackgammonPlayEntry — pitfalls
 
 - **Reset key is value-equality on `(Mop, Dice)`, not reference identity.**
@@ -254,11 +334,35 @@ Both components live in namespace `BgDiag_Razor.Components`.
   pass positions via their own skip-to-next-problem flow.
 - **Cube decisions are rejected at the contract boundary.** A `DiagramRequest`
   with `Decision.IsCube == true` throws `NotImplementedException` from
-  `OnParametersSet`. Route cube decisions to a sibling cube-entry component
-  (not yet implemented).
+  `OnParametersSet`. Route cube decisions to `BackgammonCubeEntry`, which
+  carries the symmetric guard on play decisions.
 - **The inner diagram's cube hit region still renders** (because
   `BackgammonDiagram` always wires it) but `BackgammonPlayEntry` does not
   subscribe; cube-area clicks during play entry are no-ops by design.
+
+## BackgammonCubeEntry — pitfalls
+
+- **Play decisions are rejected at the contract boundary.** A
+  `DiagramRequest` with `Decision.IsCube == false` throws
+  `NotImplementedException` from `OnParametersSet`. Route play decisions to
+  `BackgammonPlayEntry` (which carries the symmetric guard). Consumers
+  branch on `Request.Decision.IsCube`; do not pass a play request to this
+  component "to render the position without buttons" — the guard is
+  deliberate.
+- **The inner diagram's cube hit region still renders** (because
+  `BackgammonDiagram` always wires it) but `BackgammonCubeEntry` does not
+  subscribe; cube-region clicks on the diagram are no-ops by design. The
+  verdict is entered via the four buttons in the `bg-cube-entry-verdicts`
+  row, not via the diagram's hit-regions — a single cube region cannot
+  disambiguate four outcomes.
+- **`OnCubeVerdictCompleted` fires on every click.** There is no internal
+  one-shot lock. If a consumer needs one-shot semantics it must implement
+  them on its side (typically by advancing to the next problem on the
+  first callback). Tests pin this contract.
+- **No imperative `UndoLast` / `UndoAll`.** A cube verdict has no sub-state
+  to roll back. Consumers needing a "let me reconsider" affordance should
+  re-render the same `DiagramRequest`; the component remains in its
+  unselected state since there is no internal selection to clear.
 
 ## BackgammonDiagram — pitfalls
 
@@ -299,12 +403,6 @@ Both components live in namespace `BgDiag_Razor.Components`.
   hover, source-selection feedback, and any future point-highlighting
   consumer in a single small addition. Index→rect mapping stays inside
   `BackgammonDiagram` where the rest of it lives — no consumer-side leak.
-- **Cube-entry sibling component.** A `BackgammonCubeEntry` component
-  paralleling `BackgammonPlayEntry` for cube decisions: radio-button surface
-  for `{ NoDouble, DoubleTake, DoublePass, TooGood }` with an
-  `EventCallback<CubeAction>` (or equivalent). Consumers route based on
-  `DiagramRequest.Decision.IsCube` — play decisions to `BackgammonPlayEntry`,
-  cube decisions to `BackgammonCubeEntry`.
 - **Migrate off `MarkupString` injection.** Once `BackgammonDiagram_Lib`
   exposes a rendering API that emits structured elements rather than a
   single SVG string, replace the `(MarkupString)` injection with a native

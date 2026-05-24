@@ -1,0 +1,17 @@
+@if (Request is not null)
+{
+    <div class="bg-cube-entry" @attributes="AdditionalAttributes">
+        <BackgammonDiagram Request="Request" Options="Options" />
+        <div class="bg-cube-entry-verdicts" role="group" aria-label="Cube decision verdicts">
+            @foreach (var (verdict, label) in _verdicts)
+            {
+                <button type="button"
+                        class="bg-cube-verdict"
+                        data-verdict="@verdict"
+                        @onclick="() => HandleVerdictSelected(verdict)">
+                    @label
+                </button>
+            }
+        </div>
+    </div>
+}
