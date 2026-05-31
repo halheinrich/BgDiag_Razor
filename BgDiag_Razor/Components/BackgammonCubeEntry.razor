@@ -2,13 +2,24 @@
 {
     <div class="bg-cube-entry" @attributes="AdditionalAttributes">
         <BackgammonDiagram Request="Request" Options="Options" />
-        <div class="bg-cube-entry-verdicts" role="group" aria-label="Cube decision verdicts">
-            @foreach (var (verdict, label) in _verdicts)
+        <div class="bg-cube-doubler" role="group" aria-label="Doubler decision">
+            @foreach (var (action, label) in _doublerActions)
             {
                 <button type="button"
-                        class="bg-cube-verdict"
-                        data-verdict="@verdict"
-                        @onclick="() => HandleVerdictSelected(verdict)">
+                        class="bg-cube-action@(_doubler == action ? " bg-cube-action-selected" : "")"
+                        data-action="@action"
+                        @onclick="() => HandleDoublerSelected(action)">
+                    @label
+                </button>
+            }
+        </div>
+        <div class="bg-cube-taker" role="group" aria-label="Taker decision">
+            @foreach (var (action, label) in _takerActions)
+            {
+                <button type="button"
+                        class="bg-cube-action@(_taker == action ? " bg-cube-action-selected" : "")"
+                        data-action="@action"
+                        @onclick="() => HandleTakerSelected(action)">
                     @label
                 </button>
             }

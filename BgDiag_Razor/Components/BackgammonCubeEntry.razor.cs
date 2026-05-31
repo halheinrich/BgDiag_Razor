@@ -6,9 +6,13 @@ namespace BgDiag_Razor.Components;
 
 /// <summary>
 /// Stateful cube-decision entry. Wraps a view-only <see cref="BackgammonDiagram"/>
-/// and presents the four <see cref="CubeVerdict"/> options as buttons. Selecting
-/// a verdict invokes <see cref="OnCubeVerdictCompleted"/> with the chosen enum
-/// value.
+/// and presents the cube decision as two independent atomic button groups — the
+/// doubler's <see cref="CubeAction.NoDouble"/> / <see cref="CubeAction.Double"/>
+/// choice and the taker's <see cref="CubeAction.Take"/> / <see cref="CubeAction.Pass"/>
+/// choice. Once both halves are selected, the component emits the raw answer as a
+/// <see cref="CubeDecisionPair"/> via <see cref="OnCubeDecisionCompleted"/>; scoring
+/// the pair against the correct cube action is the (future) quiz layer's job, not
+/// this component's.
 ///
 /// <para>
 /// <b>Companion to</b> <see cref="BackgammonPlayEntry"/>. Where
@@ -22,15 +26,31 @@ namespace BgDiag_Razor.Components;
 /// </para>
 ///
 /// <para>
-/// <b>Verdict surface</b>. The four <see cref="CubeVerdict"/> members
-/// (<see cref="CubeVerdict.NoDouble"/>, <see cref="CubeVerdict.DoubleTake"/>,
-/// <see cref="CubeVerdict.DoublePass"/>, <see cref="CubeVerdict.TooGood"/>)
-/// each render as a button. The component is intentionally stateless beyond
-/// the cached <see cref="Request"/> — there is no provisional "selected but
-/// not yet committed" state, no internal "completed" lock, and no imperative
-/// undo. Every button click fires <see cref="OnCubeVerdictCompleted"/>; the
-/// consumer decides what to do on subsequent clicks (most quiz consumers will
-/// navigate away on the first callback, making re-selection moot).
+/// <b>Two atomic groups</b>. The cube decision is entered as two independent
+/// choices, each a two-button group:
+/// <list type="bullet">
+///   <item>Doubler — "No Double" (<see cref="CubeAction.NoDouble"/>) /
+///   "Double" (<see cref="CubeAction.Double"/>)</item>
+///   <item>Taker — "Take" (<see cref="CubeAction.Take"/>) /
+///   "Pass" (<see cref="CubeAction.Pass"/>)</item>
+/// </list>
+/// Both halves are entered before any solution is shown; the component does not
+/// know or encode which combination is correct. Because the doubler group can
+/// only yield a doubler-half action and the taker group a taker-half action, the
+/// <see cref="CubeDecisionPair"/> constructed here always satisfies that type's
+/// half-guards — construction never throws in this component.
+/// </para>
+///
+/// <para>
+/// <b>Provisional state and re-fire semantics</b>. Each click records the chosen
+/// action for its group (<see cref="_doubler"/> / <see cref="_taker"/>) and marks
+/// that button selected. There is no lock — re-selecting within a group is
+/// allowed. Whenever <i>both</i> halves are set after a click,
+/// <see cref="OnCubeDecisionCompleted"/> fires with the current
+/// <see cref="CubeDecisionPair"/>, so the consumer always holds the latest
+/// complete answer; changing a selection after completion re-fires with the
+/// updated pair. Provisional state resets when <see cref="Request"/> advances to
+/// a new cube position (see reset semantics below).
 /// </para>
 ///
 /// <para>
@@ -43,9 +63,8 @@ namespace BgDiag_Razor.Components;
 /// <b>Inner diagram's cube hit region</b> still renders (because
 /// <see cref="BackgammonDiagram"/> always wires it) but is not subscribed by
 /// this component; cube-area clicks on the diagram are no-ops by design. The
-/// verdict is entered via the buttons, not via the diagram's hit-regions —
-/// a single cube region cannot disambiguate four outcomes without a secondary
-/// modal.
+/// decision is entered via the two button groups, not via the diagram's
+/// hit-regions.
 /// </para>
 /// </summary>
 public partial class BackgammonCubeEntry : ComponentBase
@@ -55,7 +74,7 @@ public partial class BackgammonCubeEntry : ComponentBase
     // -----------------------------------------------------------------------
 
     /// <summary>
-    /// The cube decision to render and accept a verdict against. Required
+    /// The cube decision to render and accept an answer against. Required
     /// (non-null to render anything). The position and match state flow
     /// through to the inner diagram unchanged. Play decisions
     /// (<c>Decision.IsCube == false</c>) throw <see cref="NotImplementedException"/>;
@@ -69,14 +88,22 @@ public partial class BackgammonCubeEntry : ComponentBase
     public DiagramOptions Options { get; set; } = new();
 
     /// <summary>
-    /// Fires when the user selects a verdict. Carries the chosen
-    /// <see cref="CubeVerdict"/>. Fires on every button click — there is no
-    /// internal one-shot lock; if the consumer wants to ignore subsequent
-    /// selections it can do so on its side (e.g. by advancing to the next
-    /// problem on the first callback).
+    /// Fires when both halves of the cube decision have been selected, carrying
+    /// the user's answer as a <see cref="CubeDecisionPair"/>. Re-fires whenever a
+    /// selection changes after completion, so the consumer always holds the
+    /// current complete pair. Does not fire while only one half is selected.
+    ///
+    /// <para>
+    /// Marked <see cref="EditorRequiredAttribute"/>: a consumer that omits this
+    /// binding gets nothing useful from the component, and an out-of-date
+    /// attribute name on a Razor consumer would otherwise splat silently
+    /// (RZ2012 surfaces the missing binding at compile time). This deliberately
+    /// adopts the stricter practice; the sibling
+    /// <see cref="BackgammonPlayEntry.OnPlayCompleted"/> does not yet carry it.
+    /// </para>
     /// </summary>
-    [Parameter]
-    public EventCallback<CubeVerdict> OnCubeVerdictCompleted { get; set; }
+    [Parameter, EditorRequired]
+    public EventCallback<CubeDecisionPair> OnCubeDecisionCompleted { get; set; }
 
     /// <summary>
     /// Catch-all for arbitrary HTML attributes (e.g. <c>style</c>, <c>id</c>,
@@ -88,19 +115,31 @@ public partial class BackgammonCubeEntry : ComponentBase
     public Dictionary<string, object>? AdditionalAttributes { get; set; }
 
     // -----------------------------------------------------------------------
-    //  Internal table — single source for the (verdict, button label)
-    //  mapping. Localized here because it is UI text owned by this
-    //  component; if a second consumer ever needs the same labels, lift
-    //  to a shared helper at that point.
+    //  Internal tables — single source for each group's (action, label)
+    //  mapping. Localized here because it is UI text owned by this component;
+    //  if a second consumer ever needs the same labels, lift to a shared
+    //  helper at that point.
     // -----------------------------------------------------------------------
 
-    private static readonly (CubeVerdict Verdict, string Label)[] _verdicts =
+    private static readonly (CubeAction Action, string Label)[] _doublerActions =
     [
-        (CubeVerdict.NoDouble,   "No double"),
-        (CubeVerdict.DoubleTake, "Double / Take"),
-        (CubeVerdict.DoublePass, "Double / Pass"),
-        (CubeVerdict.TooGood,    "Too good"),
+        (CubeAction.NoDouble, "No Double"),
+        (CubeAction.Double,   "Double"),
     ];
+
+    private static readonly (CubeAction Action, string Label)[] _takerActions =
+    [
+        (CubeAction.Take, "Take"),
+        (CubeAction.Pass, "Pass"),
+    ];
+
+    // -----------------------------------------------------------------------
+    //  Provisional state
+    // -----------------------------------------------------------------------
+
+    private CubeAction? _doubler;
+    private CubeAction? _taker;
+    private int[]? _cachedMop;
 
     // -----------------------------------------------------------------------
     //  Lifecycle
@@ -108,7 +147,13 @@ public partial class BackgammonCubeEntry : ComponentBase
 
     protected override void OnParametersSet()
     {
-        if (Request is null) return;
+        if (Request is null)
+        {
+            _doubler = null;
+            _taker = null;
+            _cachedMop = null;
+            return;
+        }
 
         if (!Request.Decision.IsCube)
         {
@@ -116,12 +161,46 @@ public partial class BackgammonCubeEntry : ComponentBase
                 "Play (checker) decisions are not handled by BackgammonCubeEntry. " +
                 "Route play decisions to BackgammonPlayEntry.");
         }
+
+        // Cube decisions carry no dice ([0, 0] by the data-layer invariant), so
+        // the starting position alone identifies the problem. Mirrors
+        // BackgammonPlayEntry's (Mop, Dice) reset key, with Dice dropped.
+        var mop = Request.Position.Mop;
+        if (!IsSameProblem(mop))
+        {
+            _cachedMop = [.. mop];
+            _doubler = null;
+            _taker = null;
+        }
+    }
+
+    private bool IsSameProblem(IReadOnlyList<int> mop)
+    {
+        if (_cachedMop is null) return false;
+        if (_cachedMop.Length != mop.Count) return false;
+        for (int i = 0; i < mop.Count; i++)
+            if (_cachedMop[i] != mop[i]) return false;
+        return true;
     }
 
     // -----------------------------------------------------------------------
-    //  Verdict-button click routing
+    //  Button click routing
     // -----------------------------------------------------------------------
 
-    private Task HandleVerdictSelected(CubeVerdict verdict) =>
-        OnCubeVerdictCompleted.InvokeAsync(verdict);
+    private Task HandleDoublerSelected(CubeAction action)
+    {
+        _doubler = action;
+        return FireIfComplete();
+    }
+
+    private Task HandleTakerSelected(CubeAction action)
+    {
+        _taker = action;
+        return FireIfComplete();
+    }
+
+    private Task FireIfComplete() =>
+        _doubler is { } doubler && _taker is { } taker
+            ? OnCubeDecisionCompleted.InvokeAsync(new CubeDecisionPair(doubler, taker))
+            : Task.CompletedTask;
 }
