@@ -36,6 +36,11 @@ public partial class BackgammonDiagram : ComponentBase
     [Parameter]
     public EventCallback OnTrayClicked { get; set; }
 
+    /// <summary>Fired when the dice area is clicked. The view forwards the click;
+    /// it does not interpret it (submit vs. swap is the consumer's choice).</summary>
+    [Parameter]
+    public EventCallback OnDiceClicked { get; set; }
+
     // -----------------------------------------------------------------------
     //  Catch-all for arbitrary HTML attributes (e.g. style, id, class)
     // -----------------------------------------------------------------------

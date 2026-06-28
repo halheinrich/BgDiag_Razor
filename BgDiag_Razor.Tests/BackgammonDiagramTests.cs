@@ -160,6 +160,23 @@ public class BackgammonDiagramTests : BunitContext
         Assert.True(cubeFired);
     }
 
+    [Fact]
+    public async Task ClickDiceRect_InvokesOnDiceClicked()
+    {
+        bool diceFired = false;
+        var cut = Render<BackgammonDiagram>(parameters => parameters
+            .Add(p => p.Request, DefaultRequest)
+            .Add(p => p.Options, new DiagramOptions())
+            .Add(p => p.OnDiceClicked, () => { diceFired = true; }));
+
+        // Dice rect is emitted last in the overlay (after points, bar, cube, tray).
+        var rects = cut.FindAll("rect[fill='transparent'][pointer-events='all']");
+        Assert.NotEmpty(rects);
+
+        await rects[^1].ClickAsync(new Microsoft.AspNetCore.Components.Web.MouseEventArgs());
+        Assert.True(diceFired);
+    }
+
     // -----------------------------------------------------------------------
     //  Orientation tests
     // -----------------------------------------------------------------------

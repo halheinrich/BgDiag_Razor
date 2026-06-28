@@ -72,6 +72,20 @@ public partial class BackgammonPlayEntry : ComponentBase
     public EventCallback<Play> OnPlayCompleted { get; set; }
 
     /// <summary>
+    /// Fires when the user clicks the dice on a <i>complete</i> play, signalling
+    /// "I want to submit". Parameterless by design: the consumer already holds the
+    /// assembled <see cref="Play"/> from <see cref="OnPlayCompleted"/>, so this
+    /// component stays submit-oblivious — it signals intent, it does not submit.
+    /// <para>
+    /// Marked <see cref="EditorRequiredAttribute"/> so a consumer that forgets to
+    /// bind it fails at compile time (RZ2012) rather than silently dropping the
+    /// submit affordance. Tradeoff: every use site must bind it.
+    /// </para>
+    /// </summary>
+    [Parameter, EditorRequired]
+    public EventCallback OnSubmitRequested { get; set; }
+
+    /// <summary>
     /// Catch-all for arbitrary HTML attributes (e.g. <c>style</c>, <c>id</c>,
     /// <c>class</c>) splatted onto the outer wrapper <c>div</c>.
     /// </summary>
@@ -87,6 +101,15 @@ public partial class BackgammonPlayEntry : ComponentBase
     private int[]? _cachedMop;
     private int[]? _cachedDice;
 
+    /// <summary>
+    /// Display-only flag: when set, the rendered request shows the dice in
+    /// reversed order. Purely a rendering tweak — it never touches the incoming
+    /// <see cref="Request"/> or <see cref="MoveEntryState"/>, so
+    /// <see cref="IsSameProblem"/> stays stable and in-progress entry survives.
+    /// Reset on every new problem so swap state never leaks across problems.
+    /// </summary>
+    private bool _diceSwapped;
+
     // -----------------------------------------------------------------------
     //  Lifecycle
     // -----------------------------------------------------------------------
@@ -99,6 +122,7 @@ public partial class BackgammonPlayEntry : ComponentBase
             _renderedRequest = null;
             _cachedMop = null;
             _cachedDice = null;
+            _diceSwapped = false;
             return;
         }
 
@@ -117,6 +141,7 @@ public partial class BackgammonPlayEntry : ComponentBase
             _cachedMop = [.. mop];
             _cachedDice = [.. dice];
             _state = new MoveEntryState(BoardState.FromMop(mop), dice[0], dice[1]);
+            _diceSwapped = false;  // fresh problem — swap state must not leak across problems
         }
 
         RebuildRenderedRequest();
@@ -142,6 +167,8 @@ public partial class BackgammonPlayEntry : ComponentBase
         }
         var b = DiagramRequest.Builder.From(Request);
         b.Mop = [.. _state.Current.ToMop()];
+        if (_diceSwapped)
+            b.Dice = [b.Dice[1], b.Dice[0]];  // display-only reorder; Request/state untouched
         _renderedRequest = b.Build();
     }
 
@@ -152,6 +179,31 @@ public partial class BackgammonPlayEntry : ComponentBase
     private Task HandlePointClick(int point) => TryClick(point);
     private Task HandleBarClick(int bar) => TryClick(bar);
     private Task HandleTrayClick() => TryClick(0);
+
+    /// <summary>
+    /// Dice click. On a complete play it signals submit intent via
+    /// <see cref="OnSubmitRequested"/> (this component never submits itself). On an
+    /// incomplete play it toggles the display-only dice swap and re-renders —
+    /// except for doubles, where reversing equal dice changes nothing, so it's a
+    /// no-op (no pointless render).
+    /// </summary>
+    private async Task HandleDiceClick()
+    {
+        if (_state is null) return;
+
+        if (_state.IsComplete)
+        {
+            await OnSubmitRequested.InvokeAsync();
+            return;
+        }
+
+        // Incomplete: swap is a visual no-op for doubles.
+        if (_cachedDice is { Length: 2 } d && d[0] == d[1]) return;
+
+        _diceSwapped = !_diceSwapped;
+        RebuildRenderedRequest();
+        StateHasChanged();
+    }
 
     private async Task TryClick(int clickIndex)
     {

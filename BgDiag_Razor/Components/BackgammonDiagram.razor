@@ -35,6 +35,12 @@
                           fill="transparent" pointer-events="all"
                           @onclick="OnTrayClicked" />
                 }
+                @if (_hitRegions.Dice is { } dice)
+                {
+                    <rect x="@dice.X" y="@dice.Y" width="@dice.Width" height="@dice.Height"
+                          fill="transparent" pointer-events="all"
+                          @onclick="OnDiceClicked" />
+                }
             </svg>
         }
     </div>

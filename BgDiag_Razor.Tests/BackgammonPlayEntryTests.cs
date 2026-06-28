@@ -89,6 +89,17 @@ public class BackgammonPlayEntryTests : BunitContext
         return rects[rectIndex].ClickAsync(new MouseEventArgs());
     }
 
+    /// <summary>
+    /// Clicks the dice overlay rect. The diagram emits the dice rect last (after
+    /// points, bar, cube, tray), and a play always has a dice region, so the
+    /// final transparent rect is the dice.
+    /// </summary>
+    private static Task ClickDiceAsync(IRenderedComponent<BackgammonPlayEntry> cut)
+    {
+        var rects = cut.FindAll("rect[fill='transparent'][pointer-events='all']");
+        return rects[^1].ClickAsync(new MouseEventArgs());
+    }
+
     // -----------------------------------------------------------------------
     //  Render
     // -----------------------------------------------------------------------
@@ -345,6 +356,95 @@ public class BackgammonPlayEntryTests : BunitContext
         // Clicking tray without re-selecting source must not complete.
         await ClickRectAsync(cut, RectIndexForTray(dice22));
         Assert.Equal(0, fireCount);
+    }
+
+    // -----------------------------------------------------------------------
+    //  Dice click — complete → submit signal; incomplete → display-only swap
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public async Task CompletePlay_DiceClick_FiresOnSubmitRequested()
+    {
+        var request = BearOffOneRequest();
+        var submitCount = 0;
+
+        var cut = Render<BackgammonPlayEntry>(p => p
+            .Add(c => c.Request, request)
+            .Add(c => c.OnSubmitRequested, () => { submitCount++; }));
+
+        // Drive the play to completion (1/off).
+        await ClickRectAsync(cut, RectIndexForPoint(request, 1));
+        await ClickRectAsync(cut, RectIndexForTray(request));
+
+        // Dice click on a complete play signals submit intent.
+        await ClickDiceAsync(cut);
+        Assert.Equal(1, submitCount);
+    }
+
+    [Fact]
+    public async Task IncompletePlay_DiceClick_SwapsDiceDisplay_DoesNotSubmit()
+    {
+        var request = StandardRequest(3, 1);  // non-doubles, incomplete at start
+        var submitCount = 0;
+
+        var cut = Render<BackgammonPlayEntry>(p => p
+            .Add(c => c.Request, request)
+            .Add(c => c.OnSubmitRequested, () => { submitCount++; }));
+
+        // The diagram's "to play" label reflects the rendered dice order. (Full
+        // markup comparison is brittle — Blazor reassigns blazor:onclick handler
+        // IDs after every event — so assert on the stable rendered text instead.)
+        Assert.Contains("3-1 to play", cut.Markup);
+
+        await ClickDiceAsync(cut);
+
+        // Display-only reorder: 3-1 → 1-3. The model is untouched, so no submit.
+        Assert.Contains("1-3 to play", cut.Markup);
+        Assert.DoesNotContain("3-1 to play", cut.Markup);
+        Assert.Equal(0, submitCount);
+    }
+
+    [Fact]
+    public async Task DoublesIncomplete_DiceClick_IsNoOp_DoesNotSubmit()
+    {
+        var request = StandardRequest(2, 2);  // doubles
+        var submitCount = 0;
+
+        var cut = Render<BackgammonPlayEntry>(p => p
+            .Add(c => c.Request, request)
+            .Add(c => c.OnSubmitRequested, () => { submitCount++; }));
+
+        Assert.Contains("2-2 to play", cut.Markup);
+
+        await ClickDiceAsync(cut);
+
+        // Reversing equal dice changes nothing — dice order holds, no submit.
+        Assert.Contains("2-2 to play", cut.Markup);
+        Assert.Equal(0, submitCount);
+    }
+
+    [Fact]
+    public async Task NewProblem_ResetsDiceSwap()
+    {
+        var requestA = StandardRequest(3, 1);
+        var requestB = StandardRequest(5, 2);  // different dice ⇒ different problem
+
+        var cut = Render<BackgammonPlayEntry>(p => p
+            .Add(c => c.Request, requestA)
+            .Add(c => c.OnSubmitRequested, () => { }));
+
+        // Swap A's dice display: 3-1 → 1-3.
+        await ClickDiceAsync(cut);
+        Assert.Contains("1-3 to play", cut.Markup);
+
+        // Switch to the new problem B. The swap must reset, so B renders in its
+        // natural order (5-2), not a leaked-swap (2-5) variant.
+        cut.Render(p => p
+            .Add(c => c.Request, requestB)
+            .Add(c => c.OnSubmitRequested, () => { }));
+
+        Assert.Contains("5-2 to play", cut.Markup);
+        Assert.DoesNotContain("2-5 to play", cut.Markup);
     }
 
     [Fact]
