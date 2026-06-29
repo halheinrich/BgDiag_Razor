@@ -158,9 +158,21 @@ Internally:
   `DiagramRequest.Builder.From(Request)` with `Mop` patched from
   `_state.Current.ToMop()`. Other fields (names, cube, orientation) flow
   through unchanged.
-- Click handlers route `OnPointClicked` / `OnBarClicked` / `OnTrayClicked`
-  through `_state.TryAddClick(...)` and rebuild `_renderedRequest` on any
-  outcome other than `Illegal`. `PlayCompleted` fires `OnPlayCompleted`.
+- Click handlers implement **one-click source-advance**: `OnPointClicked` /
+  `OnBarClicked` route through
+  `_state.TryAdvanceFrom(point, diePreference)` — a single click commits one
+  move from that source, the die chosen by `diePreference` (the rendered dice
+  order, leftmost first; see the dice swap below). `OnTrayClicked` routes
+  through `_state.TryBearOffMax()` — the bear-off-max shortcut, which bears off
+  the maximum number of checkers when that is unambiguous. Both rebuild
+  `_renderedRequest` on any outcome other than `Illegal`; `PlayCompleted` fires
+  `OnPlayCompleted`.
+- The dice click (`OnDiceClicked`) is display/submit, not entry: on a complete
+  play it fires `OnSubmitRequested`; on an incomplete play it toggles a
+  display-only dice swap (a no-op for doubles) that reorders only the rendered
+  dice — and thereby which die a one-click advance prefers. The incoming
+  `Request` and `MoveEntryState` are untouched, so the swap never disturbs the
+  reset key or in-progress entry.
 
 `AdditionalAttributes` is splatted onto `BackgammonPlayEntry`'s own outer
 `bg-play-entry` wrapper `div` — a separate wrapper above the inner
@@ -252,12 +264,15 @@ position — even a distinct object reference — preserves provisional state.
 
 Match `MoveEntryState`'s contract and the inner diagram's event surface:
 
-- `1..24` — regular board points.
-- `25` — on-roll player's bar (legal source if a bar checker is present).
-- `0` — bear-off tray (legal destination only).
+- `1..24` — regular board points (advance source: a click commits a move from
+  that point via `TryAdvanceFrom`).
+- `25` — on-roll player's bar (advance source / entry, if a bar checker is
+  present).
 
-`OnPointClicked` carries 1–24, `OnBarClicked` always emits 25,
-`OnTrayClicked` is parameter-less and routes to click index 0.
+`OnPointClicked` carries 1–24 and `OnBarClicked` always emits 25 — both routed
+to `TryAdvanceFrom`. `OnTrayClicked` is parameter-less; it is not a click index —
+it routes to `TryBearOffMax` (the bear-off-max shortcut). Bearing off a single
+checker is an ordinary advance from its home point, not a tray click.
 
 ### Test project
 
@@ -316,10 +331,9 @@ All three components live in namespace `BgDiag_Razor.Components`.
 
 **Imperative methods** (call via `@ref`):
 
-- `void UndoLast()` — clears any pending source selection, otherwise undoes
-  the last committed move.
-- `void UndoAll()` — restores the initial position and clears all
-  selections; allowed even after completion (consumer can expose this as
+- `void UndoLast()` — undoes the last committed move (no-op if none).
+- `void UndoAll()` — restores the initial position, discarding all committed
+  moves; allowed even after completion (consumer can expose this as
   "redo from start").
 
 ### `BackgammonCubeEntry`
@@ -435,10 +449,9 @@ back, so the play-entry-style `UndoLast` / `UndoAll` does not apply.
   (set of point indices) and `SelectedPoint` (single index, optional)
   parameters to the view-only primitive, rendered as translucent overlays
   using the same `BoardHitRegions` machinery the click overlay already uses.
-  `BackgammonPlayEntry` then forwards `state.LegalNextClicks` and
-  `state.SelectedSource` in a one-line plumbing change. Unlocks legal-hint
-  hover, source-selection feedback, and any future point-highlighting
-  consumer in a single small addition. Index→rect mapping stays inside
+  `BackgammonPlayEntry` then forwards `state.LegalNextClicks` (the points you
+  can advance from now) in a one-line plumbing change. Unlocks legal-hint
+  hover and any future point-highlighting consumer in a single small addition. Index→rect mapping stays inside
   `BackgammonDiagram` where the rest of it lives — no consumer-side leak.
 - **Migrate off `MarkupString` injection.** Once `BackgammonDiagram_Lib`
   exposes a rendering API that emits structured elements rather than a
