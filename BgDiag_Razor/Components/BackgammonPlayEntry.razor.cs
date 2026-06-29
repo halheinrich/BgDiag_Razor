@@ -6,18 +6,24 @@ using BgMoveGen;
 namespace BgDiag_Razor.Components;
 
 /// <summary>
-/// Stateful click-by-click play entry. Wraps a view-only <see cref="BackgammonDiagram"/>
+/// Stateful one-click play entry. Wraps a view-only <see cref="BackgammonDiagram"/>
 /// and drives a <see cref="MoveEntryState"/> from its click events. Each completed
 /// <see cref="Play"/> is reported via <see cref="OnPlayCompleted"/>.
 ///
 /// <para>
-/// <b>Click index conventions</b> (matching <see cref="MoveEntryState"/>'s contract and
-/// the inner diagram's event surface):
+/// <b>One-click source-advance</b>: a single click on a checker's point (or the
+/// bar) commits one move from that source via
+/// <see cref="MoveEntryState.TryAdvanceFrom"/>, the model choosing which die to
+/// consume by <see cref="DicePreference"/> (the rendered dice order, leftmost
+/// first — see #2's display swap). A full play is entered by successive single
+/// clicks. Click index conventions:
 /// <list type="bullet">
-///   <item>1..24 — regular board points</item>
-///   <item>25 — on-roll player's bar (legal source if a bar checker is present)</item>
-///   <item>0 — bear-off tray (legal destination only)</item>
+///   <item>1..24 — regular board points (click a point holding an own checker)</item>
+///   <item>25 — on-roll player's bar (click to enter, if a bar checker is present)</item>
 /// </list>
+/// Bearing off is an ordinary advance: clicking a home point whose move lands on
+/// the tray commits the bear-off. The tray itself is not a click target — the
+/// diagram still draws it, but a click there is an unbound no-op.
 /// </para>
 ///
 /// <para>
@@ -176,9 +182,41 @@ public partial class BackgammonPlayEntry : ComponentBase
     //  Click routing
     // -----------------------------------------------------------------------
 
-    private Task HandlePointClick(int point) => TryClick(point);
-    private Task HandleBarClick(int bar) => TryClick(bar);
-    private Task HandleTrayClick() => TryClick(0);
+    // One-click source-advance: a single click on a point (or the bar) commits
+    // the move from that source, the model picking which die to consume by
+    // DicePreference(). Bearing off is just a source-click on a home point whose
+    // advancing move lands on the tray (ToPt == 0), so there is no separate
+    // tray-click handler — the diagram still draws the tray, but a click there is
+    // an unbound no-op.
+    private Task HandlePointClick(int point) => Advance(point);
+    private Task HandleBarClick(int bar) => Advance(bar);
+
+    /// <summary>
+    /// The rendered dice order, leftmost die first — reflecting the #2 display
+    /// swap. This is the only place "leftmost die" is known; the model stays
+    /// die-order-agnostic and one-click advance prefers whichever die the user
+    /// currently sees on the left.
+    /// </summary>
+    private IReadOnlyList<int> DicePreference()
+    {
+        var dice = Request!.Decision.Dice;
+        return _diceSwapped ? [dice[1], dice[0]] : [dice[0], dice[1]];
+    }
+
+    private async Task Advance(int point)
+    {
+        if (_state is null) return;
+
+        var outcome = _state.TryAdvanceFrom(point, DicePreference());
+        if (outcome == ClickOutcome.Illegal) return;
+
+        RebuildRenderedRequest();
+
+        if (outcome == ClickOutcome.PlayCompleted && _state.CompletedPlay is { } play)
+        {
+            await OnPlayCompleted.InvokeAsync(play);
+        }
+    }
 
     /// <summary>
     /// Dice click. On a complete play it signals submit intent via
@@ -203,21 +241,6 @@ public partial class BackgammonPlayEntry : ComponentBase
         _diceSwapped = !_diceSwapped;
         RebuildRenderedRequest();
         StateHasChanged();
-    }
-
-    private async Task TryClick(int clickIndex)
-    {
-        if (_state is null) return;
-
-        var outcome = _state.TryAddClick(clickIndex);
-        if (outcome == ClickOutcome.Illegal) return;
-
-        RebuildRenderedRequest();
-
-        if (outcome == ClickOutcome.PlayCompleted && _state.CompletedPlay is { } play)
-        {
-            await OnPlayCompleted.InvokeAsync(play);
-        }
     }
 
     // -----------------------------------------------------------------------
