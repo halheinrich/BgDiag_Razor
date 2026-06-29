@@ -311,6 +311,9 @@ All three components live in namespace `BgDiag_Razor.Components`.
 - `EventCallback OnCubeClicked` — fired when the cube region is clicked.
 - `EventCallback OnTrayClicked` — fired when the on-roll player's bearing-off
   tray is clicked.
+- `EventCallback OnDiceClicked` — fired when the dice region is clicked
+  (rendered only when a dice hit-region exists, i.e. not for cube decisions).
+  The view forwards the click; it does not interpret it.
 
 ### `BackgammonPlayEntry`
 
@@ -328,6 +331,13 @@ All three components live in namespace `BgDiag_Razor.Components`.
 - `EventCallback<Play> OnPlayCompleted` — fires once when the click sequence
   assembles a complete legal `Play`. Does not fire for pass positions or
   partial / illegal sequences.
+- `EventCallback OnSubmitRequested` (**required**, `[EditorRequired]`) —
+  parameterless; fires when the user clicks the dice on a *complete* play,
+  signalling submit intent. The component stays submit-oblivious: it only
+  signals (the consumer already holds the `Play` from `OnPlayCompleted`), and
+  the consumer binds this to its own submit action. Marked `[EditorRequired]`
+  so a consumer that forgets to bind it surfaces an `RZ2012` warning rather
+  than silently dropping the submit affordance.
 
 **Imperative methods** (call via `@ref`):
 
