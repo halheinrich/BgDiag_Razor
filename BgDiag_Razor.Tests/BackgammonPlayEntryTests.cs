@@ -124,6 +124,15 @@ public class BackgammonPlayEntryTests : BunitContext
         return regions.Points.Count;
     }
 
+    /// <summary>The on-roll tray rect follows the points, bar, and optional cube.</summary>
+    private static int RectIndexForTray(DiagramRequest req)
+    {
+        var regions = DiagramRenderer.GetHitRegions(req, new DiagramOptions());
+        if (regions.OnRollTray is null)
+            throw new InvalidOperationException("Request has no OnRollTray region.");
+        return regions.Points.Count + 1 + (regions.Cube is null ? 0 : 1);
+    }
+
     private static Task ClickRectAsync(
         IRenderedComponent<BackgammonPlayEntry> cut, int rectIndex)
     {
@@ -379,6 +388,115 @@ public class BackgammonPlayEntryTests : BunitContext
         var rectsPost = cut.FindAll("rect[fill='transparent'][pointer-events='all']");
         Assert.NotEmpty(rectsPost);
         await rectsPost[0].ClickAsync(new MouseEventArgs());
+        Assert.Equal(1, fireCount);
+    }
+
+    // -----------------------------------------------------------------------
+    //  Tray click — bear-off-max shortcut
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public async Task TrayClick_UniqueMaxBearOff_CompletesPlay()
+    {
+        // BearOffPair's deepest completion bears off BOTH checkers (4/off, 2/off)
+        // and is the unique maximum, so one tray click completes the turn.
+        var request = BearOffPairRequest();
+        Play? completed = null;
+        var fireCount = 0;
+
+        var cut = Render<BackgammonPlayEntry>(p => p
+            .Add(c => c.Request, request)
+            .Add(c => c.OnPlayCompleted, (Play play) => { completed = play; fireCount++; }));
+
+        await ClickRectAsync(cut, RectIndexForTray(request));
+
+        Assert.Equal(1, fireCount);
+        Assert.NotNull(completed);
+        Assert.Equal(2, completed!.Value.Count);  // both checkers borne off
+    }
+
+    [Fact]
+    public async Task TrayClick_AmbiguousMaxBearOff_IsNoOp()
+    {
+        // Checkers on the 6-pt and 3-pt with dice (6,2). Exactly one checker can
+        // bear off, but two distinct finals tie at the maximum:
+        //   6/off (die 6) + 3/1 (die 2)            → {1}
+        //   6/4  (die 2) + 4/off (die 6, overshoot) → {3}
+        // The tie makes max bear-off ambiguous, so the tray click is a no-op and
+        // the user must bear off via individual home-point clicks.
+        var m = new int[26];
+        m[6] = 1;
+        m[3] = 1;
+        var request = new DiagramRequest.Builder
+        {
+            Mop = m,
+            OnRollName = "Player",
+            OpponentName = "Opponent",
+            Dice = [6, 2],
+            CubeSize = 1,
+            CubeOwner = CubeOwner.Centered,
+        }.Build();
+        var fired = false;
+
+        var cut = Render<BackgammonPlayEntry>(p => p
+            .Add(c => c.Request, request)
+            .Add(c => c.OnPlayCompleted, (Play _) => { fired = true; }));
+
+        await ClickRectAsync(cut, RectIndexForTray(request));
+        Assert.False(fired);
+
+        // State unchanged: the play is still enterable click-by-click. Clicking
+        // the 6-pt advances (6/off via die 6), proving the tray was a no-op.
+        await ClickRectAsync(cut, RectIndexForPoint(request, 6));
+        await ClickRectAsync(cut, RectIndexForPoint(request, 3));
+        Assert.True(fired);
+    }
+
+    [Fact]
+    public async Task TrayClick_NoCheckerCanBearOff_IsNoOp()
+    {
+        // A checker on the 8-pt is outside the home board, so no bear-off is legal
+        // (all checkers must be home first). Two on-board checkers keep the
+        // borne-off count in range, so the tray hit-rect is still drawn — the
+        // click reaches the handler but TryBearOffMax finds no bear-off → no-op.
+        var m = new int[26];
+        m[8] = 1;
+        m[6] = 1;
+        var request = new DiagramRequest.Builder
+        {
+            Mop = m,
+            OnRollName = "Player",
+            OpponentName = "Opponent",
+            Dice = [2, 1],
+            CubeSize = 1,
+            CubeOwner = CubeOwner.Centered,
+        }.Build();
+        var fired = false;
+
+        var cut = Render<BackgammonPlayEntry>(p => p
+            .Add(c => c.Request, request)
+            .Add(c => c.OnPlayCompleted, (Play _) => { fired = true; }));
+
+        await ClickRectAsync(cut, RectIndexForTray(request));
+        Assert.False(fired);
+    }
+
+    [Fact]
+    public async Task TrayClick_AfterCompletion_IsNoOp()
+    {
+        // BearOffOne completes on the single 1-pt click; a subsequent tray click
+        // must not fire completion again.
+        var request = BearOffOneRequest();
+        var fireCount = 0;
+
+        var cut = Render<BackgammonPlayEntry>(p => p
+            .Add(c => c.Request, request)
+            .Add(c => c.OnPlayCompleted, (Play _) => { fireCount++; }));
+
+        await ClickRectAsync(cut, RectIndexForPoint(request, 1));
+        Assert.Equal(1, fireCount);
+
+        await ClickRectAsync(cut, RectIndexForTray(request));
         Assert.Equal(1, fireCount);
     }
 

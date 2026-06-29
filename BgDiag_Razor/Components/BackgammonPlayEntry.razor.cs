@@ -21,9 +21,16 @@ namespace BgDiag_Razor.Components;
 ///   <item>1..24 — regular board points (click a point holding an own checker)</item>
 ///   <item>25 — on-roll player's bar (click to enter, if a bar checker is present)</item>
 /// </list>
-/// Bearing off is an ordinary advance: clicking a home point whose move lands on
-/// the tray commits the bear-off. The tray itself is not a click target — the
-/// diagram still draws it, but a click there is an unbound no-op.
+/// Bearing off a single checker is an ordinary advance: clicking a home point
+/// whose move lands on the tray commits the bear-off.
+/// </para>
+///
+/// <para>
+/// <b>Tray click — bear-off-max shortcut</b>: clicking the tray bears off the
+/// maximum number of checkers via <see cref="MoveEntryState.TryBearOffMax"/> when
+/// that is unambiguous, completing the turn. It is a no-op when the max bear-off
+/// is ambiguous (two ways tie), when no checker can bear off, or when the play is
+/// already complete — there the user bears off via individual home-point clicks.
 /// </para>
 ///
 /// <para>
@@ -184,12 +191,12 @@ public partial class BackgammonPlayEntry : ComponentBase
 
     // One-click source-advance: a single click on a point (or the bar) commits
     // the move from that source, the model picking which die to consume by
-    // DicePreference(). Bearing off is just a source-click on a home point whose
-    // advancing move lands on the tray (ToPt == 0), so there is no separate
-    // tray-click handler — the diagram still draws the tray, but a click there is
-    // an unbound no-op.
+    // DicePreference(). Bearing off a single checker is just a source-click on its
+    // home point (whose advancing move lands on the tray, ToPt == 0); a tray-click
+    // is the bear-off-MAX shortcut (see HandleTrayClick).
     private Task HandlePointClick(int point) => Advance(point);
     private Task HandleBarClick(int bar) => Advance(bar);
+    private Task HandleTrayClick() => BearOffMax();
 
     /// <summary>
     /// The rendered dice order, leftmost die first — reflecting the #2 display
@@ -208,6 +215,30 @@ public partial class BackgammonPlayEntry : ComponentBase
         if (_state is null) return;
 
         var outcome = _state.TryAdvanceFrom(point, DicePreference());
+        if (outcome == ClickOutcome.Illegal) return;
+
+        RebuildRenderedRequest();
+
+        if (outcome == ClickOutcome.PlayCompleted && _state.CompletedPlay is { } play)
+        {
+            await OnPlayCompleted.InvokeAsync(play);
+        }
+    }
+
+    /// <summary>
+    /// Tray click — the bear-off-MAX shortcut. Bears off the maximum number of
+    /// checkers when that is unambiguous, completing the turn. A no-op (no state
+    /// change, no completion) when the max bear-off is ambiguous (two ways tie),
+    /// when no checker can bear off, or when the play is already complete — in
+    /// those cases the user bears off via individual home-point clicks instead.
+    /// <see cref="MoveEntryState.TryBearOffMax"/> always completes the turn when
+    /// it commits, so there is no MoveCommitted branch here.
+    /// </summary>
+    private async Task BearOffMax()
+    {
+        if (_state is null) return;
+
+        var outcome = _state.TryBearOffMax();
         if (outcome == ClickOutcome.Illegal) return;
 
         RebuildRenderedRequest();
