@@ -453,12 +453,16 @@ public class BackgammonPlayEntryTests : BunitContext
     }
 
     [Fact]
-    public async Task TrayClick_NoCheckerCanBearOff_IsNoOp()
+    public async Task TrayClick_DiceCannotBringOutlierHomeAndBearOff_IsNoOp()
     {
-        // A checker on the 8-pt is outside the home board, so no bear-off is legal
-        // (all checkers must be home first). Two on-board checkers keep the
-        // borne-off count in range, so the tray hit-rect is still drawn — the
-        // click reaches the handler but TryBearOffMax finds no bear-off → no-op.
+        // Checkers on the 8-pt and 6-pt with dice (2,1). The 8-pt outlier doesn't
+        // categorically block bear-off — with 6-2 this same shape bears off
+        // (8/6, 6/off). It's the specific dice that matter: 2-1 can bring the
+        // outlier home (8/6 via the 2) but the leftover 1 can't bear anything off
+        // (a 1 only bears off the 1-pt, which is empty). No completion bears off,
+        // so TryBearOffMax is a no-op. Two on-board checkers keep the borne-off
+        // count in range, so the tray hit-rect is still drawn and the click
+        // reaches the handler.
         var m = new int[26];
         m[8] = 1;
         m[6] = 1;
