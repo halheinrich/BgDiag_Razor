@@ -164,6 +164,27 @@ public class BackgammonPlayEntryTests : BunitContext
         return false;
     }
 
+    /// <summary>
+    /// Count of moves landing on <paramref name="point"/>, regardless of the
+    /// <see cref="Move.ToPt"/> hit sign (a hit is encoded as a negative ToPt). A
+    /// completed make lands two checkers on the point, so this returns 2.
+    /// </summary>
+    private static int PlayLandingsOn(Play play, int point)
+    {
+        int n = 0;
+        for (int i = 0; i < play.Count; i++)
+            if (Math.Abs(play[i].ToPt) == point) n++;
+        return n;
+    }
+
+    /// <summary>True if any move hits on <paramref name="point"/> (ToPt == -point).</summary>
+    private static bool PlayHits(Play play, int point)
+    {
+        for (int i = 0; i < play.Count; i++)
+            if (play[i].ToPt == -point) return true;
+        return false;
+    }
+
     // -----------------------------------------------------------------------
     //  Render
     // -----------------------------------------------------------------------
@@ -353,20 +374,185 @@ public class BackgammonPlayEntryTests : BunitContext
     }
 
     [Fact]
-    public async Task ClickPointWithNoOwnChecker_IsNoOp()
+    public async Task ClickEmptyUnreachablePoint_IsNoOp()
     {
-        // E1: a point with no on-roll checker offers no advance (E2 will add
-        // make-point). Point 23 is empty in the standard starting position.
+        // E2: a destination click tries make-the-point when advance is illegal. The
+        // 4-point in the standard start is empty, unmakeable (no two checkers reach
+        // it) AND unreachable by a single move (no move-one fallback) on a 3-1 — so
+        // both advance and make are illegal and the click is a true no-op. We prove
+        // state is intact by then making the 5-point (8/5 6/5), which still completes.
         var request = StandardRequest(3, 1);
-        var fired = false;
+        var fireCount = 0;
 
         var cut = Render<BackgammonPlayEntry>(p => p
             .Add(c => c.Request, request)
-            .Add(c => c.OnPlayCompleted, (Play _) => { fired = true; }));
+            .Add(c => c.OnPlayCompleted, (Play _) => { fireCount++; }));
 
-        await ClickRectAsync(cut, RectIndexForPoint(request, 23));
+        await ClickRectAsync(cut, RectIndexForPoint(request, 4));
+        Assert.Equal(0, fireCount);  // neither make nor move-one has a candidate
 
-        Assert.False(fired);
+        await ClickRectAsync(cut, RectIndexForPoint(request, 5));  // make 5-pt, unaffected
+        Assert.Equal(1, fireCount);
+    }
+
+    // -----------------------------------------------------------------------
+    //  One-click make-the-point (destination click; advance-then-make)
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public async Task ClickEmptyPoint_NonDoublesMake_FiresCompleted()
+    {
+        // Standard start, dice (3,1): clicking the empty 5-point lands two own
+        // checkers on it — 8/5 (die 3) + 6/5 (die 1). Both dice are consumed, so the
+        // make completes the play. Advance is illegal on the empty point, so the
+        // click falls through to make.
+        var request = StandardRequest(3, 1);
+        Play? completed = null;
+        var fireCount = 0;
+
+        var cut = Render<BackgammonPlayEntry>(p => p
+            .Add(c => c.Request, request)
+            .Add(c => c.OnPlayCompleted, (Play play) => { completed = play; fireCount++; }));
+
+        await ClickRectAsync(cut, RectIndexForPoint(request, 5));
+
+        Assert.Equal(1, fireCount);
+        Assert.NotNull(completed);
+        Assert.True(PlayContains(completed!.Value, frPt: 8, toPt: 5), "8/5 should be part of the make.");
+        Assert.True(PlayContains(completed!.Value, frPt: 6, toPt: 5), "6/5 should be part of the make.");
+    }
+
+    [Fact]
+    public async Task ClickOpponentBlot_MakeAndHit_FiresCompleted()
+    {
+        // Own on 8 and 6, an opponent blot on 5, dice (3,1). Clicking the 5-point
+        // makes it over the blot: 8/5* hits, 6/5 covers. Two checkers land on 5 and
+        // one of the arrivals is a hit (negative ToPt). Both dice ⇒ completes.
+        var m = new int[26];
+        m[8] = 1;
+        m[6] = 1;
+        m[5] = -1;  // opponent blot
+        var request = new DiagramRequest.Builder
+        {
+            Mop = m,
+            OnRollName = "Player",
+            OpponentName = "Opponent",
+            Dice = [3, 1],
+            CubeSize = 1,
+            CubeOwner = CubeOwner.Centered,
+        }.Build();
+        Play? completed = null;
+        var fireCount = 0;
+
+        var cut = Render<BackgammonPlayEntry>(p => p
+            .Add(c => c.Request, request)
+            .Add(c => c.OnPlayCompleted, (Play play) => { completed = play; fireCount++; }));
+
+        await ClickRectAsync(cut, RectIndexForPoint(request, 5));
+
+        Assert.Equal(1, fireCount);
+        Assert.NotNull(completed);
+        Assert.Equal(2, PlayLandingsOn(completed!.Value, point: 5));  // point made (two checkers)
+        Assert.True(PlayHits(completed!.Value, point: 5), "An arrival onto the blot should be a hit.");
+    }
+
+    [Fact]
+    public async Task DoublesMake_LeavesPlayInProgress_FollowUpClickCompletes()
+    {
+        // Own on 12 and 14, dice (2,2). Making the 10-point is a three-sub-move make
+        // (12/10 + 14/12/10) that leaves one 2 unplayed — so the make commits but the
+        // play stays in-progress (OnPlayCompleted must NOT fire). A follow-up click on
+        // the now-own 10-point advances 10/8 with the last die and completes.
+        var m = new int[26];
+        m[12] = 1;
+        m[14] = 1;
+        var request = new DiagramRequest.Builder
+        {
+            Mop = m,
+            OnRollName = "Player",
+            OpponentName = "Opponent",
+            Dice = [2, 2],
+            CubeSize = 1,
+            CubeOwner = CubeOwner.Centered,
+        }.Build();
+        var fireCount = 0;
+
+        var cut = Render<BackgammonPlayEntry>(p => p
+            .Add(c => c.Request, request)
+            .Add(c => c.OnPlayCompleted, (Play _) => { fireCount++; }));
+
+        await ClickRectAsync(cut, RectIndexForPoint(request, 10));  // doubles make, dice left
+        Assert.Equal(0, fireCount);  // play still in-progress
+
+        await ClickRectAsync(cut, RectIndexForPoint(request, 10));  // advance 10/8, last die
+        Assert.Equal(1, fireCount);  // now complete
+    }
+
+    [Fact]
+    public async Task ClickUnmakeablePoint_OneCheckerLands_MovesOne()
+    {
+        // A single checker on 8, dice (3,1), click the empty 5-point. The point is
+        // unmakeable (one checker can't put two on it), so the move-one fallback
+        // lands the lone checker via die 3 (8/5) — leaving the play in-progress. A
+        // follow-up click on the now-own 5-point advances 5/4 (die 1) and completes,
+        // proving the move-one actually landed a checker on 5.
+        var m = new int[26];
+        m[8] = 1;
+        var request = new DiagramRequest.Builder
+        {
+            Mop = m,
+            OnRollName = "Player",
+            OpponentName = "Opponent",
+            Dice = [3, 1],
+            CubeSize = 1,
+            CubeOwner = CubeOwner.Centered,
+        }.Build();
+        var fireCount = 0;
+
+        var cut = Render<BackgammonPlayEntry>(p => p
+            .Add(c => c.Request, request)
+            .Add(c => c.OnPlayCompleted, (Play _) => { fireCount++; }));
+
+        await ClickRectAsync(cut, RectIndexForPoint(request, 5));  // move-one 8/5
+        Assert.Equal(0, fireCount);  // in-progress (one die left)
+
+        await ClickRectAsync(cut, RectIndexForPoint(request, 5));  // advance 5/4, completes
+        Assert.Equal(1, fireCount);
+    }
+
+    [Fact]
+    public async Task ClickOwnOccupiedSource_StillAdvances_MakeNotEngaged()
+    {
+        // Two own checkers on 8, dice (3,1). The 8-point holds own checkers, so the
+        // click advances (E1) and never engages make (the producer rejects a make on
+        // an own-occupied point). Two clicks play 8/5 (die 3) then 8/7 (die 1) — two
+        // distinct single advances off the source — and the completed play carries
+        // both. If the click had wrongly routed to make, the own-occupied guard would
+        // make it a no-op and the play would never complete.
+        var m = new int[26];
+        m[8] = 2;
+        var request = new DiagramRequest.Builder
+        {
+            Mop = m,
+            OnRollName = "Player",
+            OpponentName = "Opponent",
+            Dice = [3, 1],
+            CubeSize = 1,
+            CubeOwner = CubeOwner.Centered,
+        }.Build();
+        Play? completed = null;
+        var fireCount = 0;
+
+        var cut = Render<BackgammonPlayEntry>(p => p
+            .Add(c => c.Request, request)
+            .Add(c => c.OnPlayCompleted, (Play play) => { completed = play; fireCount++; }));
+
+        await ClickRectAsync(cut, RectIndexForPoint(request, 8));  // 8/5 (die 3)
+        await ClickRectAsync(cut, RectIndexForPoint(request, 8));  // 8/7 (die 1)
+
+        Assert.Equal(1, fireCount);
+        Assert.True(PlayContains(completed!.Value, frPt: 8, toPt: 5), "First advance 8/5.");
+        Assert.True(PlayContains(completed!.Value, frPt: 8, toPt: 7), "Second advance 8/7.");
     }
 
     [Fact]

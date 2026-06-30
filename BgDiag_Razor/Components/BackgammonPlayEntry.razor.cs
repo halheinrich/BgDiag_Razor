@@ -26,6 +26,21 @@ namespace BgDiag_Razor.Components;
 /// </para>
 ///
 /// <para>
+/// <b>One-click make-the-point</b>: clicking a <i>destination</i> point that holds
+/// no own checker (an empty point or an opponent blot) lands two own checkers on it
+/// via <see cref="MoveEntryState.TryMakePoint"/>, hitting a blot there
+/// automatically. A point click therefore tries source-advance first and only falls
+/// through to make when advance is illegal — the producer's own-occupied guard
+/// makes that dispatch board-blind, so an own checker always advances (E1) and a
+/// point with no own checker falls to make without the component inspecting the
+/// board. A non-doubles make consumes both dice and completes the play; a doubles
+/// make may leave dice for further clicks (the play stays in-progress). When the
+/// point cannot be made, a single checker that can land there is moved instead. The
+/// bar (a source, never a make destination) and the tray (bear-off-max) do
+/// <i>not</i> chain to make.
+/// </para>
+///
+/// <para>
 /// <b>Tray click — bear-off-max shortcut</b>: clicking the tray bears off the
 /// maximum number of checkers via <see cref="MoveEntryState.TryBearOffMax"/> when
 /// that is unambiguous, completing the turn. It is a no-op when the max bear-off
@@ -189,12 +204,14 @@ public partial class BackgammonPlayEntry : ComponentBase
     //  Click routing
     // -----------------------------------------------------------------------
 
-    // One-click source-advance: a single click on a point (or the bar) commits
-    // the move from that source, the model picking which die to consume by
-    // DicePreference(). Bearing off a single checker is just a source-click on its
-    // home point (whose advancing move lands on the tray, ToPt == 0); a tray-click
-    // is the bear-off-MAX shortcut (see HandleTrayClick).
-    private Task HandlePointClick(int point) => Advance(point);
+    // One-click dispatch. A point click is advance-then-make (PointClick): an own
+    // checker advances from that source; a point with no own checker falls through
+    // to make-the-point. A bar click is advance-only — the bar is a source, never a
+    // make destination — so it does not chain to make. Bearing off a single checker
+    // is just a source-advance on its home point (whose move lands on the tray,
+    // ToPt == 0); a tray click is the bear-off-MAX shortcut (see HandleTrayClick).
+    // The model picks which die to consume by DicePreference().
+    private Task HandlePointClick(int point) => PointClick(point);
     private Task HandleBarClick(int bar) => Advance(bar);
     private Task HandleTrayClick() => BearOffMax();
 
@@ -210,19 +227,30 @@ public partial class BackgammonPlayEntry : ComponentBase
         return _diceSwapped ? [dice[1], dice[0]] : [dice[0], dice[1]];
     }
 
-    private async Task Advance(int point)
+    /// <summary>
+    /// Point click — advance-then-make. An own checker on <paramref name="point"/>
+    /// advances from it (E1); if that is illegal the point holds no own checker, so
+    /// the click falls through to make-the-point on it (E2). The advance-first
+    /// ordering plus the producer's own-occupied guard keep the dispatch board-blind
+    /// — the component never inspects <c>_state.Current</c>. Illegal from both is a
+    /// no-op.
+    /// </summary>
+    private async Task PointClick(int point)
     {
         if (_state is null) return;
 
         var outcome = _state.TryAdvanceFrom(point, DicePreference());
-        if (outcome == ClickOutcome.Illegal) return;
+        if (outcome == ClickOutcome.Illegal)
+            outcome = _state.TryMakePoint(point, DicePreference());
 
-        RebuildRenderedRequest();
+        await ApplyOutcome(outcome);
+    }
 
-        if (outcome == ClickOutcome.PlayCompleted && _state.CompletedPlay is { } play)
-        {
-            await OnPlayCompleted.InvokeAsync(play);
-        }
+    /// <summary>Source-advance only (used by the bar, which is never a make destination).</summary>
+    private async Task Advance(int point)
+    {
+        if (_state is null) return;
+        await ApplyOutcome(_state.TryAdvanceFrom(point, DicePreference()));
     }
 
     /// <summary>
@@ -231,19 +259,29 @@ public partial class BackgammonPlayEntry : ComponentBase
     /// change, no completion) when the max bear-off is ambiguous (two ways tie),
     /// when no checker can bear off, or when the play is already complete — in
     /// those cases the user bears off via individual home-point clicks instead.
-    /// <see cref="MoveEntryState.TryBearOffMax"/> always completes the turn when
-    /// it commits, so there is no MoveCommitted branch here.
+    /// <see cref="MoveEntryState.TryBearOffMax"/> always completes the turn when it
+    /// commits, so a <see cref="ClickOutcome.MoveCommitted"/> never arises here.
     /// </summary>
     private async Task BearOffMax()
     {
         if (_state is null) return;
+        await ApplyOutcome(_state.TryBearOffMax());
+    }
 
-        var outcome = _state.TryBearOffMax();
+    /// <summary>
+    /// Shared tail for every one-click action: a no-op on
+    /// <see cref="ClickOutcome.Illegal"/>; otherwise re-renders the board and, only
+    /// on <see cref="ClickOutcome.PlayCompleted"/>, fires <see cref="OnPlayCompleted"/>.
+    /// A <see cref="ClickOutcome.MoveCommitted"/> (including a doubles make that
+    /// leaves dice) just re-renders and waits for the next click.
+    /// </summary>
+    private async Task ApplyOutcome(ClickOutcome outcome)
+    {
         if (outcome == ClickOutcome.Illegal) return;
 
         RebuildRenderedRequest();
 
-        if (outcome == ClickOutcome.PlayCompleted && _state.CompletedPlay is { } play)
+        if (outcome == ClickOutcome.PlayCompleted && _state!.CompletedPlay is { } play)
         {
             await OnPlayCompleted.InvokeAsync(play);
         }
