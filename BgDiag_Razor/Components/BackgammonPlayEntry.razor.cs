@@ -241,7 +241,7 @@ public partial class BackgammonPlayEntry : ComponentBase
 
         var outcome = _state.TryAdvanceFrom(point, DicePreference());
         if (outcome == ClickOutcome.Illegal)
-            outcome = _state.TryMakePoint(point, DicePreference());
+            outcome = _state.TryMakePoint(point);
 
         await ApplyOutcome(outcome);
     }

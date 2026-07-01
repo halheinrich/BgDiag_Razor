@@ -377,10 +377,13 @@ public class BackgammonPlayEntryTests : BunitContext
     public async Task ClickEmptyUnreachablePoint_IsNoOp()
     {
         // E2: a destination click tries make-the-point when advance is illegal. The
-        // 4-point in the standard start is empty, unmakeable (no two checkers reach
-        // it) AND unreachable by a single move (no move-one fallback) on a 3-1 — so
-        // both advance and make are illegal and the click is a true no-op. We prove
-        // state is intact by then making the 5-point (8/5 6/5), which still completes.
+        // 1-point in the standard start is empty, unmakeable, AND unreachable on a
+        // 3-1 — the nearest own checkers (6 and 8) are both more than 4 pips away, and
+        // points 2-5 hold no own checker, so no single move and no combined 3-then-1
+        // path lands on 1. (The 4-point, by contrast, is reachable via the combined
+        // 8/7 7/4, so it is not a no-op.) Both advance and make are illegal, so the
+        // click is a true no-op. We prove state is intact by then making the 5-point
+        // (8/5 6/5), which still completes.
         var request = StandardRequest(3, 1);
         var fireCount = 0;
 
@@ -388,7 +391,7 @@ public class BackgammonPlayEntryTests : BunitContext
             .Add(c => c.Request, request)
             .Add(c => c.OnPlayCompleted, (Play _) => { fireCount++; }));
 
-        await ClickRectAsync(cut, RectIndexForPoint(request, 4));
+        await ClickRectAsync(cut, RectIndexForPoint(request, 1));
         Assert.Equal(0, fireCount);  // neither make nor move-one has a candidate
 
         await ClickRectAsync(cut, RectIndexForPoint(request, 5));  // make 5-pt, unaffected
@@ -454,6 +457,43 @@ public class BackgammonPlayEntryTests : BunitContext
         Assert.NotNull(completed);
         Assert.Equal(2, PlayLandingsOn(completed!.Value, point: 5));  // point made (two checkers)
         Assert.True(PlayHits(completed!.Value, point: 5), "An arrival onto the blot should be a hit.");
+    }
+
+    [Fact]
+    public async Task ClickOpponentBlot_ReachableOnlyViaCombinedPath_HitsAndFiresCompleted()
+    {
+        // One own checker on 18, an opponent blot on 10, dice (6,2). Point 10 is
+        // unmakeable (a lone checker) and has no direct single-die landing (18 is 8
+        // pips from 10), so the land-one fallback walks the combined path to it —
+        // 18/16 16/10* (equivalently 18/12 12/10*, same final board) — hitting the
+        // blot. Both dice are consumed, so the play completes and OnPlayCompleted
+        // fires. This is the end-to-end of the TryMakePoint(int) follow-up: a
+        // destination click that lands via a combined multi-die path.
+        var m = new int[26];
+        m[18] = 1;
+        m[10] = -1;  // opponent blot
+        var request = new DiagramRequest.Builder
+        {
+            Mop = m,
+            OnRollName = "Player",
+            OpponentName = "Opponent",
+            Dice = [6, 2],
+            CubeSize = 1,
+            CubeOwner = CubeOwner.Centered,
+        }.Build();
+        Play? completed = null;
+        var fireCount = 0;
+
+        var cut = Render<BackgammonPlayEntry>(p => p
+            .Add(c => c.Request, request)
+            .Add(c => c.OnPlayCompleted, (Play play) => { completed = play; fireCount++; }));
+
+        await ClickRectAsync(cut, RectIndexForPoint(request, 10));
+
+        Assert.Equal(1, fireCount);
+        Assert.NotNull(completed);
+        Assert.Equal(1, PlayLandingsOn(completed!.Value, point: 10));  // one checker lands on 10
+        Assert.True(PlayHits(completed!.Value, point: 10), "The arrival onto the blot should be a hit.");
     }
 
     [Fact]
