@@ -77,8 +77,8 @@ public class BackgammonCubeEntryTests : BunitContext
 
         // All four bijection labels are present.
         Assert.Contains("No double", cut.Markup);
-        Assert.Contains("Double / Take", cut.Markup);
-        Assert.Contains("Double / Pass", cut.Markup);
+        Assert.Contains("Double/Take", cut.Markup);
+        Assert.Contains("Double/Pass", cut.Markup);
         Assert.Contains("Too good", cut.Markup);
     }
 
@@ -160,7 +160,7 @@ public class BackgammonCubeEntryTests : BunitContext
             .Add(c => c.OnCubeDecisionCompleted,
                 (CubeDecisionPair pair) => received.Add(pair)));
 
-        // Select "Double / Take" (index 1), then switch to "Too good" (index 3).
+        // Select "Double/Take" (index 1), then switch to "Too good" (index 3).
         await Radios(cut)[1].ChangeAsync(new ChangeEventArgs { Value = true });
         await Radios(cut)[3].ChangeAsync(new ChangeEventArgs { Value = true });
 
@@ -184,11 +184,11 @@ public class BackgammonCubeEntryTests : BunitContext
             .Add(c => c.Request, CubeRequest())
             .Add(c => c.OnCubeDecisionCompleted, (CubeDecisionPair _) => { }));
 
-        // Select "Double / Take" (index 1).
+        // Select "Double/Take" (index 1).
         await Radios(cut)[1].ChangeAsync(new ChangeEventArgs { Value = true });
 
         var selected = cut.FindAll(".bg-cube-action.bg-cube-action-selected");
         Assert.Single(selected);
-        Assert.Equal("Double / Take", selected[0].TextContent.Trim());
+        Assert.Equal("Double/Take", selected[0].TextContent.Trim());
     }
 }

@@ -33,9 +33,9 @@ namespace BgDiag_Razor.Components;
 /// <list type="bullet">
 ///   <item>"No double" — (<see cref="CubeAction.NoDouble"/>,
 ///   <see cref="CubeAction.Take"/>)</item>
-///   <item>"Double / Take" — (<see cref="CubeAction.Double"/>,
+///   <item>"Double/Take" — (<see cref="CubeAction.Double"/>,
 ///   <see cref="CubeAction.Take"/>)</item>
-///   <item>"Double / Pass" — (<see cref="CubeAction.Double"/>,
+///   <item>"Double/Pass" — (<see cref="CubeAction.Double"/>,
 ///   <see cref="CubeAction.Pass"/>)</item>
 ///   <item>"Too good" — (<see cref="CubeAction.NoDouble"/>,
 ///   <see cref="CubeAction.Pass"/>): don't double, but the opponent would pass.</item>
@@ -132,10 +132,10 @@ public partial class BackgammonCubeEntry : ComponentBase
 
     private static readonly (string Label, CubeDecisionPair Pair)[] _cubeOptions =
     [
-        ("No double",     new CubeDecisionPair(CubeAction.NoDouble, CubeAction.Take)),
-        ("Double / Take", new CubeDecisionPair(CubeAction.Double,   CubeAction.Take)),
-        ("Double / Pass", new CubeDecisionPair(CubeAction.Double,   CubeAction.Pass)),
-        ("Too good",      new CubeDecisionPair(CubeAction.NoDouble, CubeAction.Pass)),
+        ("No double",   new CubeDecisionPair(CubeAction.NoDouble, CubeAction.Take)),
+        ("Double/Take", new CubeDecisionPair(CubeAction.Double,   CubeAction.Take)),
+        ("Double/Pass", new CubeDecisionPair(CubeAction.Double,   CubeAction.Pass)),
+        ("Too good",    new CubeDecisionPair(CubeAction.NoDouble, CubeAction.Pass)),
     ];
 
     // -----------------------------------------------------------------------
