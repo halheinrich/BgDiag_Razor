@@ -2,7 +2,7 @@ using Bunit;
 using BgDiag_Razor.Components;
 using BackgammonDiagram_Lib;
 using BgDataTypes_Lib;
-using Microsoft.AspNetCore.Components.Web;
+using Microsoft.AspNetCore.Components;
 
 namespace BgDiag_Razor.Tests;
 
@@ -52,12 +52,17 @@ public class BackgammonCubeEntryTests : BunitContext
             CubeOwner = CubeOwner.Centered,
         }.Build();
 
+    /// <summary>The four radio inputs, in render order (matches the _cubeOptions table).</summary>
+    private static IReadOnlyList<AngleSharp.Dom.IElement> Radios(
+        IRenderedComponent<BackgammonCubeEntry> cut) =>
+        cut.FindAll(".bg-cube-actions input[type=radio]");
+
     // -----------------------------------------------------------------------
     //  Render
     // -----------------------------------------------------------------------
 
     [Fact]
-    public void Render_WithCubeRequest_ContainsInnerDiagramAndBothGroups()
+    public void Render_WithCubeRequest_ContainsInnerDiagramAndFourRadios()
     {
         var cut = Render<BackgammonCubeEntry>(p => p
             .Add(c => c.Request, CubeRequest())
@@ -66,13 +71,15 @@ public class BackgammonCubeEntryTests : BunitContext
         Assert.Contains("<svg", cut.Markup);
         Assert.Contains("bg-cube-entry", cut.Markup);
 
-        // Doubler group: two buttons (No Double / Double).
-        var doublerButtons = cut.FindAll(".bg-cube-doubler button");
-        Assert.Equal(2, doublerButtons.Count);
+        // One radio group holding the four mutually-exclusive options.
+        Assert.Single(cut.FindAll("[role=radiogroup]"));
+        Assert.Equal(4, Radios(cut).Count);
 
-        // Taker group: two buttons (Take / Pass).
-        var takerButtons = cut.FindAll(".bg-cube-taker button");
-        Assert.Equal(2, takerButtons.Count);
+        // All four bijection labels are present.
+        Assert.Contains("No double / Take", cut.Markup);
+        Assert.Contains("Double / Take", cut.Markup);
+        Assert.Contains("Double / Pass", cut.Markup);
+        Assert.Contains("Too good to double", cut.Markup);
     }
 
     [Fact]
@@ -109,18 +116,19 @@ public class BackgammonCubeEntryTests : BunitContext
     }
 
     // -----------------------------------------------------------------------
-    //  Completion — selecting one doubler + one taker fires once with the
-    //  matching CubeDecisionPair. Parameterized over the full 2×2 grid.
+    //  Completion — selecting one radio fires once with the matching
+    //  CubeDecisionPair. Parameterized over all four options; the index tracks
+    //  the _cubeOptions render order. Note "Too good to double" (index 3) maps
+    //  to (NoDouble, Pass) — don't double, but the opponent would pass.
     // -----------------------------------------------------------------------
 
     [Theory]
-    [InlineData(0, 0, CubeAction.NoDouble, CubeAction.Take)]
-    [InlineData(0, 1, CubeAction.NoDouble, CubeAction.Pass)]
-    [InlineData(1, 0, CubeAction.Double,   CubeAction.Take)]
-    [InlineData(1, 1, CubeAction.Double,   CubeAction.Pass)]
-    public async Task SelectingBothHalves_FiresOnceWithMatchingPair(
-        int doublerIndex, int takerIndex,
-        CubeAction expectedDoubler, CubeAction expectedTaker)
+    [InlineData(0, CubeAction.NoDouble, CubeAction.Take)]
+    [InlineData(1, CubeAction.Double,   CubeAction.Take)]
+    [InlineData(2, CubeAction.Double,   CubeAction.Pass)]
+    [InlineData(3, CubeAction.NoDouble, CubeAction.Pass)]
+    public async Task SelectingRadio_FiresOnceWithMatchingPair(
+        int radioIndex, CubeAction expectedDoubler, CubeAction expectedTaker)
     {
         CubeDecisionPair? received = null;
         var fireCount = 0;
@@ -130,52 +138,20 @@ public class BackgammonCubeEntryTests : BunitContext
             .Add(c => c.OnCubeDecisionCompleted,
                 (CubeDecisionPair pair) => { received = pair; fireCount++; }));
 
-        await cut.FindAll(".bg-cube-doubler button")[doublerIndex].ClickAsync(new MouseEventArgs());
-        await cut.FindAll(".bg-cube-taker button")[takerIndex].ClickAsync(new MouseEventArgs());
+        await Radios(cut)[radioIndex].ChangeAsync(new ChangeEventArgs { Value = true });
 
         Assert.Equal(1, fireCount);
         Assert.Equal(new CubeDecisionPair(expectedDoubler, expectedTaker), received);
     }
 
     // -----------------------------------------------------------------------
-    //  Gating — only one half selected does not fire
+    //  Switching — selecting a different radio re-fires with the new pair.
+    //  (One radio completes the pair, so there is no half-selected state; the
+    //  "does not fire while incomplete" contract is trivially preserved.)
     // -----------------------------------------------------------------------
 
     [Fact]
-    public async Task SelectingOnlyDoubler_DoesNotFire()
-    {
-        var fireCount = 0;
-
-        var cut = Render<BackgammonCubeEntry>(p => p
-            .Add(c => c.Request, CubeRequest())
-            .Add(c => c.OnCubeDecisionCompleted, (CubeDecisionPair _) => fireCount++));
-
-        await cut.FindAll(".bg-cube-doubler button")[1].ClickAsync(new MouseEventArgs());
-
-        Assert.Equal(0, fireCount);
-    }
-
-    [Fact]
-    public async Task SelectingOnlyTaker_DoesNotFire()
-    {
-        var fireCount = 0;
-
-        var cut = Render<BackgammonCubeEntry>(p => p
-            .Add(c => c.Request, CubeRequest())
-            .Add(c => c.OnCubeDecisionCompleted, (CubeDecisionPair _) => fireCount++));
-
-        await cut.FindAll(".bg-cube-taker button")[0].ClickAsync(new MouseEventArgs());
-
-        Assert.Equal(0, fireCount);
-    }
-
-    // -----------------------------------------------------------------------
-    //  Re-selection — changing a half after completion re-fires with the
-    //  latest pair (no internal one-shot lock)
-    // -----------------------------------------------------------------------
-
-    [Fact]
-    public async Task ReSelectingAfterCompletion_FiresAgainWithLatestPair()
+    public async Task SwitchingRadio_FiresAgainWithNewPair()
     {
         var received = new List<CubeDecisionPair>();
 
@@ -184,37 +160,35 @@ public class BackgammonCubeEntryTests : BunitContext
             .Add(c => c.OnCubeDecisionCompleted,
                 (CubeDecisionPair pair) => received.Add(pair)));
 
-        // Complete the pair: Double + Take.
-        await cut.FindAll(".bg-cube-doubler button")[1].ClickAsync(new MouseEventArgs());
-        await cut.FindAll(".bg-cube-taker button")[0].ClickAsync(new MouseEventArgs());
-
-        // Change the doubler half to No Double — both halves still set, so it re-fires.
-        await cut.FindAll(".bg-cube-doubler button")[0].ClickAsync(new MouseEventArgs());
+        // Select "Double / Take" (index 1), then switch to "Too good to double" (index 3).
+        await Radios(cut)[1].ChangeAsync(new ChangeEventArgs { Value = true });
+        await Radios(cut)[3].ChangeAsync(new ChangeEventArgs { Value = true });
 
         Assert.Equal(
             new[]
             {
                 new CubeDecisionPair(CubeAction.Double, CubeAction.Take),
-                new CubeDecisionPair(CubeAction.NoDouble, CubeAction.Take),
+                new CubeDecisionPair(CubeAction.NoDouble, CubeAction.Pass),
             },
             received);
     }
 
     // -----------------------------------------------------------------------
-    //  Selected-state class reflects the chosen action within each group
+    //  Selected-state class tracks the single selected radio
     // -----------------------------------------------------------------------
 
     [Fact]
-    public async Task SelectedButton_GetsSelectedStateClass()
+    public async Task SelectedRadio_GetsSelectedStateClass()
     {
         var cut = Render<BackgammonCubeEntry>(p => p
             .Add(c => c.Request, CubeRequest())
             .Add(c => c.OnCubeDecisionCompleted, (CubeDecisionPair _) => { }));
 
-        await cut.FindAll(".bg-cube-doubler button")[1].ClickAsync(new MouseEventArgs());
+        // Select "Double / Take" (index 1).
+        await Radios(cut)[1].ChangeAsync(new ChangeEventArgs { Value = true });
 
-        var selected = cut.FindAll(".bg-cube-doubler button.bg-cube-action-selected");
+        var selected = cut.FindAll(".bg-cube-action.bg-cube-action-selected");
         Assert.Single(selected);
-        Assert.Equal("Double", selected[0].TextContent.Trim());
+        Assert.Equal("Double / Take", selected[0].TextContent.Trim());
     }
 }

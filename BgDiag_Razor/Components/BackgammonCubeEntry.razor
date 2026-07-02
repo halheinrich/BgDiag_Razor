@@ -2,26 +2,18 @@
 {
     <div class="bg-cube-entry" @attributes="AdditionalAttributes">
         <BackgammonDiagram Request="Request" Options="Options" />
-        <div class="bg-cube-doubler" role="group" aria-label="Doubler decision">
-            @foreach (var (action, label) in _doublerActions)
+        <div class="bg-cube-actions" role="radiogroup" aria-label="Cube decision">
+            @foreach (var (label, doubler, taker) in _cubeOptions)
             {
-                <button type="button"
-                        class="bg-cube-action@(_doubler == action ? " bg-cube-action-selected" : "")"
-                        data-action="@action"
-                        @onclick="() => HandleDoublerSelected(action)">
+                var selected = _doubler == doubler && _taker == taker;
+                <label class="bg-cube-action@(selected ? " bg-cube-action-selected" : "")">
+                    <input type="radio"
+                           name="bg-cube-action"
+                           value="@label"
+                           checked="@selected"
+                           @onchange="() => HandleCubeOptionSelected(doubler, taker)" />
                     @label
-                </button>
-            }
-        </div>
-        <div class="bg-cube-taker" role="group" aria-label="Taker decision">
-            @foreach (var (action, label) in _takerActions)
-            {
-                <button type="button"
-                        class="bg-cube-action@(_taker == action ? " bg-cube-action-selected" : "")"
-                        data-action="@action"
-                        @onclick="() => HandleTakerSelected(action)">
-                    @label
-                </button>
+                </label>
             }
         </div>
     </div>

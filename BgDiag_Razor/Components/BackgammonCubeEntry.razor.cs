@@ -6,13 +6,14 @@ namespace BgDiag_Razor.Components;
 
 /// <summary>
 /// Stateful cube-decision entry. Wraps a view-only <see cref="BackgammonDiagram"/>
-/// and presents the cube decision as two independent atomic button groups — the
+/// and presents the cube decision as four mutually-exclusive radio buttons, each
+/// mapping to one of the four possible <see cref="CubeDecisionPair"/> values (the
 /// doubler's <see cref="CubeAction.NoDouble"/> / <see cref="CubeAction.Double"/>
-/// choice and the taker's <see cref="CubeAction.Take"/> / <see cref="CubeAction.Pass"/>
-/// choice. Once both halves are selected, the component emits the raw answer as a
-/// <see cref="CubeDecisionPair"/> via <see cref="OnCubeDecisionCompleted"/>; scoring
-/// the pair against the correct cube action is the (future) quiz layer's job, not
-/// this component's.
+/// choice crossed with the taker's <see cref="CubeAction.Take"/> /
+/// <see cref="CubeAction.Pass"/> choice). Selecting a radio sets both halves
+/// atomically and emits the raw answer as a <see cref="CubeDecisionPair"/> via
+/// <see cref="OnCubeDecisionCompleted"/>; scoring the pair against the correct cube
+/// action is the (future) quiz layer's job, not this component's.
 ///
 /// <para>
 /// <b>Companion to</b> <see cref="BackgammonPlayEntry"/>. Where
@@ -26,31 +27,39 @@ namespace BgDiag_Razor.Components;
 /// </para>
 ///
 /// <para>
-/// <b>Two atomic groups</b>. The cube decision is entered as two independent
-/// choices, each a two-button group:
+/// <b>Four radio options</b>. The cube decision is entered as a single
+/// radio group whose four options are a bijection onto the four
+/// <see cref="CubeDecisionPair"/> values:
 /// <list type="bullet">
-///   <item>Doubler — "No Double" (<see cref="CubeAction.NoDouble"/>) /
-///   "Double" (<see cref="CubeAction.Double"/>)</item>
-///   <item>Taker — "Take" (<see cref="CubeAction.Take"/>) /
-///   "Pass" (<see cref="CubeAction.Pass"/>)</item>
+///   <item>"No double / Take" — (<see cref="CubeAction.NoDouble"/>,
+///   <see cref="CubeAction.Take"/>)</item>
+///   <item>"Double / Take" — (<see cref="CubeAction.Double"/>,
+///   <see cref="CubeAction.Take"/>)</item>
+///   <item>"Double / Pass" — (<see cref="CubeAction.Double"/>,
+///   <see cref="CubeAction.Pass"/>)</item>
+///   <item>"Too good to double" — (<see cref="CubeAction.NoDouble"/>,
+///   <see cref="CubeAction.Pass"/>): don't double, but the opponent would pass,
+///   so the taker half is <see cref="CubeAction.Pass"/>, not
+///   <see cref="CubeAction.Take"/>.</item>
 /// </list>
-/// Both halves are entered before any solution is shown; the component does not
-/// know or encode which combination is correct. Because the doubler group can
-/// only yield a doubler-half action and the taker group a taker-half action, the
-/// <see cref="CubeDecisionPair"/> constructed here always satisfies that type's
-/// half-guards — construction never throws in this component.
+/// The answer is entered before any solution is shown; the component does not know
+/// or encode which option is correct. Each option pairs a doubler-half action with
+/// a taker-half action, so the <see cref="CubeDecisionPair"/> constructed here
+/// always satisfies that type's half-guards — construction never throws in this
+/// component.
 /// </para>
 ///
 /// <para>
-/// <b>Provisional state and re-fire semantics</b>. Each click records the chosen
-/// action for its group (<see cref="_doubler"/> / <see cref="_taker"/>) and marks
-/// that button selected. There is no lock — re-selecting within a group is
-/// allowed. Whenever <i>both</i> halves are set after a click,
-/// <see cref="OnCubeDecisionCompleted"/> fires with the current
-/// <see cref="CubeDecisionPair"/>, so the consumer always holds the latest
-/// complete answer; changing a selection after completion re-fires with the
-/// updated pair. Provisional state resets when <see cref="Request"/> advances to
-/// a new cube position (see reset semantics below).
+/// <b>Provisional state and re-fire semantics</b>. Each selection records both
+/// halves atomically (<see cref="_doubler"/> and <see cref="_taker"/>) and marks
+/// that radio selected; selecting another clears the prior, so exactly one is
+/// selected at a time. Because one radio completes the pair,
+/// <see cref="OnCubeDecisionCompleted"/> fires on the first selection with the
+/// matching <see cref="CubeDecisionPair"/> and re-fires whenever the user switches
+/// to a different option, so the consumer always holds the latest complete answer.
+/// The "does not fire while incomplete" contract is trivially preserved — there is
+/// no half-selected state. Provisional state resets when <see cref="Request"/>
+/// advances to a new cube position (see reset semantics below).
 /// </para>
 ///
 /// <para>
@@ -63,8 +72,7 @@ namespace BgDiag_Razor.Components;
 /// <b>Inner diagram's cube hit region</b> still renders (because
 /// <see cref="BackgammonDiagram"/> always wires it) but is not subscribed by
 /// this component; cube-area clicks on the diagram are no-ops by design. The
-/// decision is entered via the two button groups, not via the diagram's
-/// hit-regions.
+/// decision is entered via the radio group, not via the diagram's hit-regions.
 /// </para>
 /// </summary>
 public partial class BackgammonCubeEntry : ComponentBase
@@ -115,22 +123,19 @@ public partial class BackgammonCubeEntry : ComponentBase
     public Dictionary<string, object>? AdditionalAttributes { get; set; }
 
     // -----------------------------------------------------------------------
-    //  Internal tables — single source for each group's (action, label)
-    //  mapping. Localized here because it is UI text owned by this component;
-    //  if a second consumer ever needs the same labels, lift to a shared
-    //  helper at that point.
+    //  Internal table — single source for the four radio options, each a
+    //  (label, doubler-half, taker-half) mapping onto one CubeDecisionPair
+    //  value. Localized here because it is UI text owned by this component; if a
+    //  second consumer ever needs the same labels, lift to a shared helper at
+    //  that point.
     // -----------------------------------------------------------------------
 
-    private static readonly (CubeAction Action, string Label)[] _doublerActions =
+    private static readonly (string Label, CubeAction Doubler, CubeAction Taker)[] _cubeOptions =
     [
-        (CubeAction.NoDouble, "No Double"),
-        (CubeAction.Double,   "Double"),
-    ];
-
-    private static readonly (CubeAction Action, string Label)[] _takerActions =
-    [
-        (CubeAction.Take, "Take"),
-        (CubeAction.Pass, "Pass"),
+        ("No double / Take",   CubeAction.NoDouble, CubeAction.Take),
+        ("Double / Take",      CubeAction.Double,   CubeAction.Take),
+        ("Double / Pass",      CubeAction.Double,   CubeAction.Pass),
+        ("Too good to double", CubeAction.NoDouble, CubeAction.Pass),
     ];
 
     // -----------------------------------------------------------------------
@@ -184,23 +189,19 @@ public partial class BackgammonCubeEntry : ComponentBase
     }
 
     // -----------------------------------------------------------------------
-    //  Button click routing
+    //  Radio selection routing
     // -----------------------------------------------------------------------
 
-    private Task HandleDoublerSelected(CubeAction action)
+    /// <summary>
+    /// Records the selected option's two halves atomically and emits the matching
+    /// <see cref="CubeDecisionPair"/>. Because each radio completes the pair, this
+    /// fires on every selection (the first click and each subsequent switch); there
+    /// is no half-selected state to gate on.
+    /// </summary>
+    private Task HandleCubeOptionSelected(CubeAction doubler, CubeAction taker)
     {
-        _doubler = action;
-        return FireIfComplete();
+        _doubler = doubler;
+        _taker = taker;
+        return OnCubeDecisionCompleted.InvokeAsync(new CubeDecisionPair(doubler, taker));
     }
-
-    private Task HandleTakerSelected(CubeAction action)
-    {
-        _taker = action;
-        return FireIfComplete();
-    }
-
-    private Task FireIfComplete() =>
-        _doubler is { } doubler && _taker is { } taker
-            ? OnCubeDecisionCompleted.InvokeAsync(new CubeDecisionPair(doubler, taker))
-            : Task.CompletedTask;
 }
