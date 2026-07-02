@@ -31,17 +31,18 @@ namespace BgDiag_Razor.Components;
 /// radio group whose four options are a bijection onto the four
 /// <see cref="CubeDecisionPair"/> values:
 /// <list type="bullet">
-///   <item>"No double / Take" — (<see cref="CubeAction.NoDouble"/>,
+///   <item>"No double" — (<see cref="CubeAction.NoDouble"/>,
 ///   <see cref="CubeAction.Take"/>)</item>
 ///   <item>"Double / Take" — (<see cref="CubeAction.Double"/>,
 ///   <see cref="CubeAction.Take"/>)</item>
 ///   <item>"Double / Pass" — (<see cref="CubeAction.Double"/>,
 ///   <see cref="CubeAction.Pass"/>)</item>
-///   <item>"Too good to double" — (<see cref="CubeAction.NoDouble"/>,
-///   <see cref="CubeAction.Pass"/>): don't double, but the opponent would pass,
-///   so the taker half is <see cref="CubeAction.Pass"/>, not
-///   <see cref="CubeAction.Take"/>.</item>
+///   <item>"Too good" — (<see cref="CubeAction.NoDouble"/>,
+///   <see cref="CubeAction.Pass"/>): don't double, but the opponent would pass.</item>
 /// </list>
+/// The two no-double options use their standard backgammon names ("No double",
+/// "Too good") and omit the redundant taker half — a taker action is only reached
+/// when the doubler doubles.
 /// The answer is entered before any solution is shown; the component does not know
 /// or encode which option is correct. Each option pairs a doubler-half action with
 /// a taker-half action, so the <see cref="CubeDecisionPair"/> constructed here
@@ -131,10 +132,10 @@ public partial class BackgammonCubeEntry : ComponentBase
 
     private static readonly (string Label, CubeDecisionPair Pair)[] _cubeOptions =
     [
-        ("No double / Take",   new CubeDecisionPair(CubeAction.NoDouble, CubeAction.Take)),
-        ("Double / Take",      new CubeDecisionPair(CubeAction.Double,   CubeAction.Take)),
-        ("Double / Pass",      new CubeDecisionPair(CubeAction.Double,   CubeAction.Pass)),
-        ("Too good to double", new CubeDecisionPair(CubeAction.NoDouble, CubeAction.Pass)),
+        ("No double",     new CubeDecisionPair(CubeAction.NoDouble, CubeAction.Take)),
+        ("Double / Take", new CubeDecisionPair(CubeAction.Double,   CubeAction.Take)),
+        ("Double / Pass", new CubeDecisionPair(CubeAction.Double,   CubeAction.Pass)),
+        ("Too good",      new CubeDecisionPair(CubeAction.NoDouble, CubeAction.Pass)),
     ];
 
     // -----------------------------------------------------------------------

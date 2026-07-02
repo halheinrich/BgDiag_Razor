@@ -76,10 +76,10 @@ public class BackgammonCubeEntryTests : BunitContext
         Assert.Equal(4, Radios(cut).Count);
 
         // All four bijection labels are present.
-        Assert.Contains("No double / Take", cut.Markup);
+        Assert.Contains("No double", cut.Markup);
         Assert.Contains("Double / Take", cut.Markup);
         Assert.Contains("Double / Pass", cut.Markup);
-        Assert.Contains("Too good to double", cut.Markup);
+        Assert.Contains("Too good", cut.Markup);
     }
 
     [Fact]
@@ -118,8 +118,8 @@ public class BackgammonCubeEntryTests : BunitContext
     // -----------------------------------------------------------------------
     //  Completion — selecting one radio fires once with the matching
     //  CubeDecisionPair. Parameterized over all four options; the index tracks
-    //  the _cubeOptions render order. Note "Too good to double" (index 3) maps
-    //  to (NoDouble, Pass) — don't double, but the opponent would pass.
+    //  the _cubeOptions render order. Note "Too good" (index 3) maps to
+    //  (NoDouble, Pass) — don't double, but the opponent would pass.
     // -----------------------------------------------------------------------
 
     [Theory]
@@ -160,7 +160,7 @@ public class BackgammonCubeEntryTests : BunitContext
             .Add(c => c.OnCubeDecisionCompleted,
                 (CubeDecisionPair pair) => received.Add(pair)));
 
-        // Select "Double / Take" (index 1), then switch to "Too good to double" (index 3).
+        // Select "Double / Take" (index 1), then switch to "Too good" (index 3).
         await Radios(cut)[1].ChangeAsync(new ChangeEventArgs { Value = true });
         await Radios(cut)[3].ChangeAsync(new ChangeEventArgs { Value = true });
 
