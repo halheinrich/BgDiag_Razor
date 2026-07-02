@@ -3,15 +3,15 @@
     <div class="bg-cube-entry" @attributes="AdditionalAttributes">
         <BackgammonDiagram Request="Request" Options="Options" />
         <div class="bg-cube-actions" role="radiogroup" aria-label="Cube decision">
-            @foreach (var (label, doubler, taker) in _cubeOptions)
+            @foreach (var (label, pair) in _cubeOptions)
             {
-                var selected = _doubler == doubler && _taker == taker;
+                var selected = _selection == pair;
                 <label class="bg-cube-action@(selected ? " bg-cube-action-selected" : "")">
                     <input type="radio"
                            name="bg-cube-action"
                            value="@label"
                            checked="@selected"
-                           @onchange="() => HandleCubeOptionSelected(doubler, taker)" />
+                           @onchange="() => HandleCubeOptionSelected(pair)" />
                     @label
                 </label>
             }

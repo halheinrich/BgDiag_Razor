@@ -50,10 +50,10 @@ namespace BgDiag_Razor.Components;
 /// </para>
 ///
 /// <para>
-/// <b>Provisional state and re-fire semantics</b>. Each selection records both
-/// halves atomically (<see cref="_doubler"/> and <see cref="_taker"/>) and marks
-/// that radio selected; selecting another clears the prior, so exactly one is
-/// selected at a time. Because one radio completes the pair,
+/// <b>Provisional state and re-fire semantics</b>. Each selection records the
+/// chosen <see cref="CubeDecisionPair"/> (<see cref="_selection"/>) and marks that
+/// radio selected; selecting another replaces it, so exactly one is selected at a
+/// time. Because one radio completes the pair,
 /// <see cref="OnCubeDecisionCompleted"/> fires on the first selection with the
 /// matching <see cref="CubeDecisionPair"/> and re-fires whenever the user switches
 /// to a different option, so the consumer always holds the latest complete answer.
@@ -124,26 +124,26 @@ public partial class BackgammonCubeEntry : ComponentBase
 
     // -----------------------------------------------------------------------
     //  Internal table — single source for the four radio options, each a
-    //  (label, doubler-half, taker-half) mapping onto one CubeDecisionPair
-    //  value. Localized here because it is UI text owned by this component; if a
-    //  second consumer ever needs the same labels, lift to a shared helper at
-    //  that point.
+    //  (label, CubeDecisionPair) mapping. Localized here because it is UI text
+    //  owned by this component; if a second consumer ever needs the same labels,
+    //  lift to a shared helper at that point.
     // -----------------------------------------------------------------------
 
-    private static readonly (string Label, CubeAction Doubler, CubeAction Taker)[] _cubeOptions =
+    private static readonly (string Label, CubeDecisionPair Pair)[] _cubeOptions =
     [
-        ("No double / Take",   CubeAction.NoDouble, CubeAction.Take),
-        ("Double / Take",      CubeAction.Double,   CubeAction.Take),
-        ("Double / Pass",      CubeAction.Double,   CubeAction.Pass),
-        ("Too good to double", CubeAction.NoDouble, CubeAction.Pass),
+        ("No double / Take",   new CubeDecisionPair(CubeAction.NoDouble, CubeAction.Take)),
+        ("Double / Take",      new CubeDecisionPair(CubeAction.Double,   CubeAction.Take)),
+        ("Double / Pass",      new CubeDecisionPair(CubeAction.Double,   CubeAction.Pass)),
+        ("Too good to double", new CubeDecisionPair(CubeAction.NoDouble, CubeAction.Pass)),
     ];
 
     // -----------------------------------------------------------------------
-    //  Provisional state
+    //  Provisional state — the single selected pair, or null when nothing is
+    //  chosen. A CubeDecisionPair is a validated value type, so equality against
+    //  a table entry's pair drives the selected-state marker directly.
     // -----------------------------------------------------------------------
 
-    private CubeAction? _doubler;
-    private CubeAction? _taker;
+    private CubeDecisionPair? _selection;
     private int[]? _cachedMop;
 
     // -----------------------------------------------------------------------
@@ -154,8 +154,7 @@ public partial class BackgammonCubeEntry : ComponentBase
     {
         if (Request is null)
         {
-            _doubler = null;
-            _taker = null;
+            _selection = null;
             _cachedMop = null;
             return;
         }
@@ -174,8 +173,7 @@ public partial class BackgammonCubeEntry : ComponentBase
         if (!IsSameProblem(mop))
         {
             _cachedMop = [.. mop];
-            _doubler = null;
-            _taker = null;
+            _selection = null;
         }
     }
 
@@ -193,15 +191,14 @@ public partial class BackgammonCubeEntry : ComponentBase
     // -----------------------------------------------------------------------
 
     /// <summary>
-    /// Records the selected option's two halves atomically and emits the matching
-    /// <see cref="CubeDecisionPair"/>. Because each radio completes the pair, this
-    /// fires on every selection (the first click and each subsequent switch); there
-    /// is no half-selected state to gate on.
+    /// Records the selected option's <see cref="CubeDecisionPair"/> and emits it.
+    /// Because each radio completes the pair, this fires on every selection (the
+    /// first click and each subsequent switch); there is no half-selected state to
+    /// gate on.
     /// </summary>
-    private Task HandleCubeOptionSelected(CubeAction doubler, CubeAction taker)
+    private Task HandleCubeOptionSelected(CubeDecisionPair pair)
     {
-        _doubler = doubler;
-        _taker = taker;
-        return OnCubeDecisionCompleted.InvokeAsync(new CubeDecisionPair(doubler, taker));
+        _selection = pair;
+        return OnCubeDecisionCompleted.InvokeAsync(pair);
     }
 }
