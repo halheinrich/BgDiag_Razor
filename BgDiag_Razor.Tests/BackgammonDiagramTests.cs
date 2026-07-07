@@ -1,6 +1,7 @@
 ﻿using Bunit;
 using BgDiag_Razor.Components;
 using BackgammonDiagram_Lib;
+using BackgammonDiagram_Lib.Rendering;
 using BgDataTypes_Lib;
 
 namespace BgDiag_Razor.Tests;
@@ -175,6 +176,55 @@ public class BackgammonDiagramTests : BunitContext
 
         await rects[^1].ClickAsync(new Microsoft.AspNetCore.Components.Web.MouseEventArgs());
         Assert.True(diceFired);
+    }
+
+    // -----------------------------------------------------------------------
+    //  Self-sizing: root carries an aspect-ratio derived from the viewBox
+    // -----------------------------------------------------------------------
+
+    [Theory]
+    [InlineData(AspectPreset.Widescreen16x9)]
+    [InlineData(AspectPreset.Standard4x3)]
+    [InlineData(AspectPreset.Natural)]
+    public void Root_CarriesAspectRatio_FromRenderedViewBox(AspectPreset aspect)
+    {
+        var options = new DiagramOptions { Aspect = aspect };
+
+        // The overlay and the aspect-ratio must come from the same source: the
+        // viewBox the renderer reports. Compute the expected ratio the same way
+        // the component sources it, so this pins "derived from the viewBox", not
+        // "equals some literal".
+        var viewBox = DiagramRenderer.GetHitRegions(DefaultRequest, options).ViewBox;
+        var expected = FormattableString.Invariant(
+            $"aspect-ratio: {viewBox.Width} / {viewBox.Height}");
+
+        var cut = Render<BackgammonDiagram>(parameters => parameters
+            .Add(p => p.Request, DefaultRequest)
+            .Add(p => p.Options, options));
+
+        var style = cut.Find(".bg-diagram").GetAttribute("style");
+        Assert.Contains("position: relative", style);
+        Assert.Contains(expected, style);
+    }
+
+    [Fact]
+    public void Root_AspectRatio_TracksPreset_NotAHardcodedLiteral()
+    {
+        // Two presets with genuinely different overall ratios must emit two
+        // different aspect-ratios — a hardcoded 16/9 literal would fail this.
+        var wide = Render<BackgammonDiagram>(parameters => parameters
+            .Add(p => p.Request, DefaultRequest)
+            .Add(p => p.Options, new DiagramOptions { Aspect = AspectPreset.Widescreen16x9 }));
+        var standard = Render<BackgammonDiagram>(parameters => parameters
+            .Add(p => p.Request, DefaultRequest)
+            .Add(p => p.Options, new DiagramOptions { Aspect = AspectPreset.Standard4x3 }));
+
+        var wideStyle = wide.Find(".bg-diagram").GetAttribute("style");
+        var standardStyle = standard.Find(".bg-diagram").GetAttribute("style");
+
+        Assert.Contains("aspect-ratio:", wideStyle);
+        Assert.Contains("aspect-ratio:", standardStyle);
+        Assert.NotEqual(wideStyle, standardStyle);
     }
 
     // -----------------------------------------------------------------------

@@ -55,6 +55,18 @@ public partial class BackgammonDiagram : ComponentBase
     private string? _svgMarkup;
     private BoardHitRegions? _hitRegions;
 
+    /// <summary>
+    /// Inline style for the <c>.bg-diagram</c> root: <c>position: relative</c>
+    /// (the overlay's positioning context) plus an <c>aspect-ratio</c> derived
+    /// from the rendered viewBox, so the component is intrinsically sizable —
+    /// a consumer supplies a width <em>or</em> a height and the box preserves
+    /// the board's ratio without re-encoding it. The ratio is render-time
+    /// dynamic (it tracks <see cref="DiagramOptions.Aspect"/>), so it lives
+    /// here, inline, sourced from the same <see cref="BoardHitRegions.ViewBox"/>
+    /// the overlay uses — one source, no literal.
+    /// </summary>
+    private string? _rootStyle;
+
     // -----------------------------------------------------------------------
     //  Lifecycle
     // -----------------------------------------------------------------------
@@ -65,10 +77,15 @@ public partial class BackgammonDiagram : ComponentBase
         {
             _svgMarkup = null;
             _hitRegions = null;
+            _rootStyle = null;
             return;
         }
 
         _svgMarkup = DiagramRenderer.RenderSvg(Request, Options);
         _hitRegions = DiagramRenderer.GetHitRegions(Request, Options);
+
+        var viewBox = _hitRegions.ViewBox;
+        _rootStyle = FormattableString.Invariant(
+            $"position: relative; aspect-ratio: {viewBox.Width} / {viewBox.Height};");
     }
 }

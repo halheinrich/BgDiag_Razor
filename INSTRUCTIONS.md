@@ -115,6 +115,13 @@ component holds no renderer state, only the cached outputs.
   the component renders nothing.
 - Otherwise, it calls `DiagramRenderer.RenderSvg(Request, Options)` and
   `DiagramRenderer.GetHitRegions(Request, Options)` and caches both in fields.
+- It then builds `_rootStyle` for the `.bg-diagram` root — `position: relative`
+  (the overlay's positioning context) plus `aspect-ratio: <W> / <H>` derived
+  from `_hitRegions.ViewBox` — so the component is intrinsically sizable (see
+  the self-sizing pitfall). The ratio is render-time dynamic (it tracks
+  `DiagramOptions.Aspect`), which is why it is injected inline rather than
+  living in scoped CSS, and it is sourced from the same viewBox the overlay
+  uses so the ratio has a single source.
 
 The markup then injects `_svgMarkup` via `(MarkupString)_svgMarkup` inside a
 child `div` that has `pointer-events: none` so clicks fall through to the
@@ -448,10 +455,19 @@ back, so the play-entry-style `UndoLast` / `UndoAll` does not apply.
   trusted. Never pass externally supplied HTML through `MarkupString` in this
   component — Blazor skips encoding it, and anything coming from outside the
   lib would be an XSS vector.
-- **No intrinsic size.** The component renders an SVG wrapper with no
-  explicit width/height. Consumers must put it inside a sized container or
-  pass size via `AdditionalAttributes`, otherwise the diagram has zero
-  layout size.
+- **Self-sizing via `aspect-ratio`, not intrinsic pixels.** The `.bg-diagram`
+  root carries `aspect-ratio: <viewBox.Width> / <viewBox.Height>` inline, so a
+  consumer sizes the component by giving it *one* definite dimension — a width
+  **or** a height, via a stretching/sized container (grid track, flex, explicit
+  dimension) — and the box preserves the board's ratio without re-encoding it.
+  The overlay is absolutely positioned at `width/height: 100%`, so it stays
+  covering the box (and thus the visible board, since both share the viewBox)
+  under any consumer sizing. Caveats: (1) it still has no fixed pixel size — a
+  consumer that constrains *neither* dimension gets a zero/ambiguous box, and a
+  consumer that pins *both* (e.g. `width: 100%; height: 100%`) makes
+  `aspect-ratio` a no-op (both definite); (2) passing `style` through
+  `AdditionalAttributes` overrides the inline style and drops the injected
+  ratio, so prefer sizing via the container over a `style` splat.
 
 ## Subproject-internal next steps
 

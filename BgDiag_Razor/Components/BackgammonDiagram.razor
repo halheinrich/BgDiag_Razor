@@ -1,6 +1,6 @@
 ﻿@if (_svgMarkup is not null)
 {
-    <div class="bg-diagram" style="position: relative;" @attributes="AdditionalAttributes">
+    <div class="bg-diagram" style="@_rootStyle" @attributes="AdditionalAttributes">
         <div style="pointer-events: none;">
             @((MarkupString)_svgMarkup)
         </div>
