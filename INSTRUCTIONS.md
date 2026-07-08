@@ -28,7 +28,7 @@ https://github.com/halheinrich/BgDiag_Razor — branch `main`.
   mutable board live in the shared-data layer; consumed here by
   `BackgammonPlayEntry` (`Play` on the public surface, `BoardState.FromMop`
   for state construction), by `BackgammonCubeEntry` (`CubeAction` for its
-  button groups, `CubeDecisionPair` on the public surface), and by tests.
+  radio options, `CubeDecisionPair` on the public surface), and by tests.
   Referenced as a project reference (also reachable transitively via
   BackgammonDiagram_Lib and BgMoveGen, but the explicit ref documents the
   direct dependency and insulates against future transitive-edge churn).
@@ -89,10 +89,10 @@ clicked a complete legal sequence. Handles play decisions only
 (`Decision.IsCube == false`); cube decisions throw at the contract boundary.
 
 `BackgammonCubeEntry` is the **cube-entry sibling** to `BackgammonPlayEntry`
-— it composes `BackgammonDiagram` and presents the cube decision as two
-independent atomic button groups (doubler: No Double / Double; taker:
-Take / Pass), firing `EventCallback<CubeDecisionPair>` once both halves are
-selected. It emits the user's raw answer; scoring it against the correct
+— it composes `BackgammonDiagram` and presents the cube decision as four
+mutually-exclusive radio options (a bijection onto the four
+`CubeDecisionPair` values), firing `EventCallback<CubeDecisionPair>` on each
+selection. It emits the user's raw answer; scoring it against the correct
 action is the future quiz layer's job. Handles cube decisions only
 (`Decision.IsCube == true`); play decisions throw at the contract boundary.
 Consumers route by `Decision.IsCube`.
@@ -225,49 +225,47 @@ is structurally simpler than the play-entry widget:
   decisions do not transform the position, so there is no Mop rebuilding
   step and no `_renderedRequest` cache.
 - No `MoveEntryState`, no `BgMoveGen` dependency.
-- Two `role="group"` button groups render alongside the inner diagram
-  inside the `bg-cube-entry` wrapper:
-  - **Doubler** (`bg-cube-doubler`): "No Double" (`CubeAction.NoDouble`) /
-    "Double" (`CubeAction.Double`).
-  - **Taker** (`bg-cube-taker`): "Take" (`CubeAction.Take`) /
-    "Pass" (`CubeAction.Pass`).
-  Each option is a `<button class="bg-cube-action">`; the currently chosen
-  option in a group additionally carries `bg-cube-action-selected` for a
-  visible selected state.
+- A single `role="radiogroup"` row (`bg-cube-actions`) renders alongside
+  the inner diagram inside the `bg-cube-entry` wrapper, holding four
+  mutually-exclusive options — a bijection onto the four `CubeDecisionPair`
+  values: "No double" (NoDouble, Take), "Double/Take" (Double, Take),
+  "Double/Pass" (Double, Pass), and "Too good" (NoDouble, Pass). The two
+  no-double options use their standard backgammon names and omit the
+  redundant taker half — a taker action is only reached when the doubler
+  doubles. Each option is a `<label class="bg-cube-action">` wrapping its
+  own `<input type="radio">`; the selected option additionally carries
+  `bg-cube-action-selected` for a visible selected state.
 
-The two `(action, label)` mappings are private static tables in the
-code-behind, one per group. Single-sourced for now; if a second consumer
-ever needs the same labels, lift to a shared helper at that point.
+The four `(label, pair)` mappings are one private static table in the
+code-behind. Single-sourced for now; if a second consumer ever needs the
+same labels, lift to a shared helper at that point.
 
 `AdditionalAttributes` is splatted onto `BackgammonCubeEntry`'s own outer
 `bg-cube-entry` wrapper `div`, parallel to `BackgammonPlayEntry`'s
 `bg-play-entry` wrapper. Consumers that style the cube-entry widget
-target `bg-cube-entry`; the two action groups are `bg-cube-doubler` and
-`bg-cube-taker`.
+target `bg-cube-entry`; the radio row is `bg-cube-actions`.
 
-### BackgammonCubeEntry — gating, re-fire, and reset
+### BackgammonCubeEntry — selection, re-fire, and reset
 
-The component holds two provisional fields, `CubeAction? _doubler` and
-`CubeAction? _taker`. Each button click sets its group's field and marks
-that button selected; there is no lock, so re-selecting within a group is
-allowed. `OnCubeDecisionCompleted` fires whenever *both* halves are set
-after a click, carrying `new CubeDecisionPair(_doubler, _taker)` — so a
-selection change after completion re-fires with the updated pair and the
-consumer always holds the current complete answer. Selecting only one half
-does not fire.
+The component holds a single provisional field,
+`CubeDecisionPair? _selection`. Selecting a radio records its pair, marks
+it selected, and fires `OnCubeDecisionCompleted` with the pair; selecting
+a different option replaces the selection and re-fires with the new pair,
+so the consumer always holds the current complete answer. One radio sets
+both halves atomically, so there is no half-selected state — the "does not
+fire while incomplete" contract is trivially preserved.
 
-Because the doubler group can only produce a doubler-half action and the
-taker group a taker-half action, the `CubeDecisionPair` constructed here
-always satisfies that type's half-guards — construction never throws in
-this component. The component emits the raw answer only; it does not encode
-which combination is correct, and holds no aggregate "is this the right
-cube action" judgment. Scoring the pair is the future quiz layer's
-responsibility.
+Because each option pairs a doubler-half action with a taker-half action,
+the `CubeDecisionPair` constructed here always satisfies that type's
+half-guards — construction never throws in this component. The component
+emits the raw answer only; it does not encode which option is correct, and
+holds no aggregate "is this the right cube action" judgment. Scoring the
+pair is the future quiz layer's responsibility.
 
 **Reset semantics** mirror `BackgammonPlayEntry`'s value-equality key,
 with dice dropped: cube decisions carry no dice (`[0, 0]` by the data-layer
 invariant), so the starting `Position.Mop` alone identifies the problem.
-`_doubler` / `_taker` reset to null only when the incoming `Request`'s `Mop`
+`_selection` resets to null only when the incoming `Request`'s `Mop`
 differs value-wise from the cached one; re-passing the same logical
 position — even a distinct object reference — preserves provisional state.
 
@@ -293,13 +291,12 @@ cover the play-entry contract: legal-completion firing, illegal no-ops,
 post-completion no-ops, undo round-trip via replay, value-equality reset on
 `(Mop, Dice)` change, identity preservation on equal `(Mop, Dice)`,
 cube-decision rejection. `BackgammonCubeEntryTests` cover the cube-entry
-contract: render shape (inner diagram + both two-button groups), null-request
-empty render, splat surface, play-decision rejection (symmetric guard),
-selecting one doubler + one taker fires `OnCubeDecisionCompleted` exactly
-once with the matching `CubeDecisionPair` (parameterized over the full 2×2
-grid), single-half selection does not fire (gating), re-selecting a half
-after completion re-fires with the latest pair, and the selected button
-carries the `bg-cube-action-selected` state class.
+contract: render shape (inner diagram + the four-option radio group),
+null-request empty render, splat surface, play-decision rejection (symmetric
+guard), each radio fires `OnCubeDecisionCompleted` exactly once with its
+matching `CubeDecisionPair` (parameterized over the four-option bijection),
+switching radios re-fires with the new pair, and the selected option carries
+the `bg-cube-action-selected` state class.
 
 ## Public API
 
@@ -383,10 +380,9 @@ All three components live in namespace `BgDiag_Razor.Components`.
 **EventCallbacks:**
 
 - `EventCallback<CubeDecisionPair> OnCubeDecisionCompleted` (**required**,
-  `[EditorRequired]`) — fires when both halves of the cube decision have
-  been selected, carrying the user's answer as a `CubeDecisionPair`. Re-fires
-  whenever a selection changes after completion (no one-shot lock); does not
-  fire while only one half is selected.
+  `[EditorRequired]`) — fires on each radio selection, carrying the user's
+  answer as a `CubeDecisionPair` (one radio sets both halves atomically).
+  Re-fires whenever the selection changes (no one-shot lock).
 
 **Imperative methods:** none. Cube decisions have no sub-state worth rolling
 back, so the play-entry-style `UndoLast` / `UndoAll` does not apply.
@@ -424,8 +420,8 @@ back, so the play-entry-style `UndoLast` / `UndoAll` does not apply.
 - **The inner diagram's cube hit region still renders** (because
   `BackgammonDiagram` always wires it) but `BackgammonCubeEntry` does not
   subscribe; cube-region clicks on the diagram are no-ops by design. The
-  decision is entered via the two button groups (`bg-cube-doubler`,
-  `bg-cube-taker`), not via the diagram's hit-regions.
+  decision is entered via the radio group (`bg-cube-actions`), not via the
+  diagram's hit-regions.
 - **`OnCubeDecisionCompleted` is `[EditorRequired]`.** Unlike the sibling
   `BackgammonPlayEntry.OnPlayCompleted`, this callback is marked required so
   a Razor consumer that omits it — or, after a future rename, leaves a stale
@@ -433,17 +429,17 @@ back, so the play-entry-style `UndoLast` / `UndoAll` does not apply.
   warning rather than splatting silently (Razor does not error on
   unrecognized component attributes). Build with warnings-as-errors to make
   that a hard gate. The sibling could adopt the same guard later.
-- **Fires when both halves are set, and re-fires on later changes.** There
-  is no one-shot lock: once both groups are selected, every subsequent
-  selection change re-fires with the updated pair. A consumer wanting
+- **Fires on every selection, and re-fires on switches.** There is no
+  one-shot lock: each radio selection fires with its pair (one radio sets
+  both halves atomically, so there is no half-selected state), and every
+  subsequent switch re-fires with the updated pair. A consumer wanting
   one-shot semantics advances to the next problem on the first callback.
-  Tests pin both the gating (single half → no fire) and the re-fire contract.
+  Tests pin both the fire-once-per-selection and the re-fire contract.
 - **Provisional state resets on `Mop` change, not reference identity.** The
   reset key is value-equality on `Position.Mop` (cube dice are always
   `[0, 0]`, so they are not part of the key). Re-passing the same logical
-  position — even a freshly built `DiagramRequest` — preserves any
-  in-progress half-selection; a different starting position resets both
-  halves.
+  position — even a freshly built `DiagramRequest` — preserves the
+  provisional selection; a different starting position clears it.
 - **No imperative `UndoLast` / `UndoAll`.** A cube decision has no sub-state
   to roll back beyond the two provisional halves, which a consumer clears by
   advancing to a new position. There is no play-entry-style undo surface.
