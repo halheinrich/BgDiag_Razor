@@ -55,8 +55,10 @@ BgDiag_Razor/
     BackgammonDiagram.razor.cs        — code-behind, parameters, lifecycle
     BackgammonPlayEntry.razor         — wraps BackgammonDiagram, drives state
     BackgammonPlayEntry.razor.cs      — code-behind, parameters, click routing
-    BackgammonCubeEntry.razor         — wraps BackgammonDiagram, two action groups
+    BackgammonPlayEntry.razor.css     — scoped: bounded-height board slot
+    BackgammonCubeEntry.razor         — wraps BackgammonDiagram, four cube radios
     BackgammonCubeEntry.razor.cs      — code-behind, parameters, decision routing
+    BackgammonCubeEntry.razor.css     — scoped: board slot + radio pills
   wwwroot/
 BgDiag_Razor.Tests/
   BgDiag_Razor.Tests.csproj
@@ -225,8 +227,9 @@ is structurally simpler than the play-entry widget:
   decisions do not transform the position, so there is no Mop rebuilding
   step and no `_renderedRequest` cache.
 - No `MoveEntryState`, no `BgMoveGen` dependency.
-- A single `role="radiogroup"` row (`bg-cube-actions`) renders alongside
-  the inner diagram inside the `bg-cube-entry` wrapper, holding four
+- A single `role="radiogroup"` row (`bg-cube-actions`) renders beside the
+  board slot (see the bounded-height contract below) inside the
+  `bg-cube-entry` wrapper, holding four
   mutually-exclusive options — a bijection onto the four `CubeDecisionPair`
   values: "No double" (NoDouble, Take), "Double/Take" (Double, Take),
   "Double/Pass" (Double, Pass), and "Too good" (NoDouble, Pass). The two
@@ -268,6 +271,34 @@ invariant), so the starting `Position.Mop` alone identifies the problem.
 `_selection` resets to null only when the incoming `Request`'s `Mop`
 differs value-wise from the cached one; re-passing the same logical
 position — even a distinct object reference — preserves provisional state.
+
+### Bounded-height contract — the board slot
+
+Both entry wrappers render the inner `BackgammonDiagram` inside an internal
+`bg-board-slot` div — the board's dedicated flex row — with any sibling
+chrome (the cube radios) outside it as a sibling of the slot. Each wrapper's
+scoped CSS makes the wrapper a flex column and the slot the shrinkable row
+(`min-height: 0`; deliberately the default `flex: 0 1 auto`, so the slot
+shrinks under a bound but never grows), while chrome keeps its content size
+(`flex: none`). The contract:
+
+- **Bounded:** a consumer that gives the wrapper a *definite* height (a real
+  `height`, or shrinkable-flex-item sizing — see Pitfalls) gets a letterboxed
+  board: the slot shrinks to the space the chrome doesn't take, its post-flex
+  height becomes definite, and `.bg-diagram`'s own contain-fit default
+  (`max-height: 100%`, auto inline margins) caps the board to it, the width
+  re-deriving through the ratio. The ratio keeps living where it lives today
+  — on `.bg-diagram`, sourced from the viewBox.
+- **Unbounded:** exactly the previous width-driven flow. A column flex with
+  auto height stacks like block flow, the slot never grows, and the
+  contain-fit percentage resolves to none. Validated empirically (live
+  browser, proposed-vs-previous structures pixel-identical).
+
+The slot structure is stated twice — once per entry's scoped CSS file —
+deliberately: Blazor scopes CSS per component, and the alternative (a plain
+`wwwroot` stylesheet) is not auto-bundled into a consumer's
+`{App}.styles.css`, which would add a manual link-tag step to every
+consumer. The two files cross-reference each other; keep them in step.
 
 ### Click index conventions
 
@@ -329,6 +360,11 @@ All three components live in namespace `BgDiag_Razor.Components`.
   (rendered only when a dice hit-region exists, i.e. not for cube decisions).
   The view forwards the click; it does not interpret it.
 
+**Sizing contract:** self-sizing via `aspect-ratio` plus a contain-fit
+default — give the containing block one definite dimension for width-driven
+flow, or a definite height to letterbox. See the self-sizing and contain-fit
+pitfalls.
+
 ### `BackgammonPlayEntry`
 
 **Parameters:**
@@ -363,6 +399,10 @@ All three components live in namespace `BgDiag_Razor.Components`.
   moves; allowed even after completion (consumer can expose this as
   "redo from start").
 
+**Sizing contract:** give `bg-play-entry` a definite height to letterbox the
+board (via the internal `bg-board-slot`); leave it unbounded for width-driven
+flow. See "Bounded-height contract" in Architecture and its Pitfalls.
+
 ### `BackgammonCubeEntry`
 
 **Parameters:**
@@ -386,6 +426,11 @@ All three components live in namespace `BgDiag_Razor.Components`.
 
 **Imperative methods:** none. Cube decisions have no sub-state worth rolling
 back, so the play-entry-style `UndoLast` / `UndoAll` does not apply.
+
+**Sizing contract:** give `bg-cube-entry` a definite height to letterbox the
+board while the radios keep their content size; leave it unbounded for
+width-driven flow. See "Bounded-height contract" in Architecture and its
+Pitfalls.
 
 ## BackgammonPlayEntry — pitfalls
 
@@ -498,6 +543,31 @@ back, so the play-entry-style `UndoLast` / `UndoAll` does not apply.
   declaration is inline, a consumer stylesheet cannot override it without
   `!important`; a consumer that genuinely wants overflow instead of
   contain-fit should size the container, not fight the default.
+
+## Bounded-height contract — pitfalls (both entry wrappers)
+
+- **Bound with a definite height, never `max-height` alone.** A `max-height`
+  on the wrapper (or any auto-height ancestor) does not engage the contract:
+  browsers size flex/block content before applying the clamp, so the content
+  simply overflows it — verified empirically. Bound with a real `height`
+  (e.g. `height: 100%` under a definite-height container) or by making the
+  wrapper a shrinkable flex item (`flex: 1 1 0; min-height: 0` in a
+  definite-height column).
+- **Bound the wrapper; don't style inside the slot.** `bg-board-slot` is
+  stable, public structure, but the supported consumer interaction is
+  bounding the wrapper. Consumer CSS that sets `height`/`flex`/`display` on
+  `.bg-board-slot`, or re-flexes the chrome (`.bg-cube-actions` is
+  `flex: none` by producer contract), replaces the mechanism rather than
+  configuring it — the letterbox and the chrome's content-sizing are only
+  guaranteed with the producer's values in force.
+- **Never `display: contents` on the wrapper.** The pre-contract consumer
+  glue (dissolving `bg-play-entry` so a percentage `max-height` could reach
+  `.bg-diagram`) now *breaks* the contract if reintroduced: it dissolves the
+  flex column that gives the slot its definite post-flex height. Migrating
+  consumers must delete that glue when adopting the contract.
+- **Don't reorder the slot and the chrome.** The slot is the wrapper's first
+  child and the chrome follows it; board-above-chrome comes from DOM order
+  (bUnit pins the structure).
 
 ## Subproject-internal next steps
 

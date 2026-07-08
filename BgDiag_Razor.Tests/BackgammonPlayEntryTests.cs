@@ -206,6 +206,39 @@ public class BackgammonPlayEntryTests : BunitContext
         Assert.Equal(string.Empty, cut.Markup.Trim());
     }
 
+    // -----------------------------------------------------------------------
+    //  Bounded-height contract — board slot structure
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public void BoardSlot_WrapsDiagram()
+    {
+        // The bounded-height contract's structural half, uniform with
+        // BackgammonCubeEntry: the diagram sits inside .bg-board-slot (the
+        // shrinkable flex row), a direct child of the wrapper, so a
+        // consumer-bounded height letterboxes the board. The layout half
+        // lives in the scoped CSS and was validated empirically; bUnit pins
+        // the markup structure it needs.
+        var cut = Render<BackgammonPlayEntry>(p => p
+            .Add(c => c.Request, StandardRequest()));
+
+        var slot = cut.Find(".bg-play-entry > .bg-board-slot");
+        Assert.NotNull(slot.QuerySelector(".bg-diagram"));
+    }
+
+    [Fact]
+    public void BoardSlot_CarriesNoInlineSizing()
+    {
+        // Unbounded no-op guard: the producer's slot is class-only — no inline
+        // style that would impose a bound of its own. Whether the board
+        // letterboxes is decided solely by the consumer bounding the wrapper.
+        var cut = Render<BackgammonPlayEntry>(p => p
+            .Add(c => c.Request, StandardRequest()));
+
+        var slot = cut.Find(".bg-board-slot");
+        Assert.Null(slot.GetAttribute("style"));
+    }
+
     [Fact]
     public void AdditionalAttributes_AreSplattedOnOuterDiv()
     {

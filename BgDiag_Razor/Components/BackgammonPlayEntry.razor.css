@@ -1,0 +1,21 @@
+/* Bounded-height contract — the same structure BackgammonCubeEntry.razor.css
+   states for its wrapper (Blazor scopes CSS per component, so the two files
+   must be kept in step by hand): the wrapper is a flex column and
+   .bg-board-slot (around the inner diagram) is the shrinkable row.
+   min-height: 0 lets the slot drop below the board's width-driven content
+   height when a consumer gives the wrapper a definite height; the slot's
+   post-flex height is then definite and .bg-diagram's own max-height: 100%
+   letterboxes the board inside it. Unbounded consumers see today's
+   width-driven flow unchanged (a column flex with auto height stacks exactly
+   like block flow, and the slot never grows — default flex: 0 1 auto). This
+   wrapper has no sibling chrome today; the slot exists so both entry widgets
+   expose one uniform height-cappable structure. */
+
+.bg-play-entry {
+    display: flex;
+    flex-direction: column;
+}
+
+.bg-board-slot {
+    min-height: 0;
+}

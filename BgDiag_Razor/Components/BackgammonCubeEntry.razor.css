@@ -1,9 +1,35 @@
+/* Bounded-height contract. The wrapper is a flex column so a consumer-given
+   definite height can reach the board: .bg-board-slot (around the inner
+   diagram) is the shrinkable row — min-height: 0 lets it drop below the
+   board's width-driven content height, at which point the slot's post-flex
+   height is definite and .bg-diagram's own max-height: 100% letterboxes the
+   board inside it. The radios row keeps its content size (flex: none below).
+   Unbounded consumers see today's width-driven flow unchanged: a column flex
+   with auto height stacks exactly like block flow, the slot never grows
+   (default flex: 0 1 auto — deliberate, so slack in a loose bound falls
+   after the radios just as in block flow), and min-height: 0 only matters
+   under a bound. BackgammonPlayEntry.razor.css states the same contract for
+   its wrapper — Blazor scopes CSS per component, so the two files must be
+   kept in step by hand. */
+
+.bg-cube-entry {
+    display: flex;
+    flex-direction: column;
+}
+
+.bg-board-slot {
+    min-height: 0;
+}
+
 /* Cube-decision radio group. Scoped to BackgammonCubeEntry — styles the four
    mutually-exclusive options rendered by the .razor. Each option is a <label>
    wrapping its own <input type="radio"> + caption, so the radio and its text
    read as one clickable unit and the row spaces the four apart. */
 
 .bg-cube-actions {
+    /* Chrome keeps its content size under the bounded-height contract: the
+       board letterboxes, the radios never shrink. */
+    flex: none;
     display: flex;
     flex-wrap: wrap;
     gap: 0.75rem;

@@ -71,6 +71,17 @@ namespace BgDiag_Razor.Components;
 /// in this case — pass-position handling (skip-to-next-problem) is the consumer's
 /// responsibility.
 /// </para>
+///
+/// <para>
+/// <b>Bounded-height contract</b>. The wrapper renders the inner diagram inside
+/// an internal <c>.bg-board-slot</c> div. Give <c>.bg-play-entry</c> a definite
+/// height (a real <c>height</c>, or shrinkable-flex-item sizing — never
+/// <c>max-height</c> alone) and the board letterboxes to it, ratio preserved;
+/// unbounded consumers get today's width-driven flow unchanged. The mechanism
+/// lives in the scoped CSS (flex column, shrinkable slot) plus
+/// <c>.bg-diagram</c>'s own contain-fit default; <see cref="BackgammonCubeEntry"/>
+/// exposes the identical structure with its radio row outside the slot.
+/// </para>
 /// </summary>
 public partial class BackgammonPlayEntry : ComponentBase
 {

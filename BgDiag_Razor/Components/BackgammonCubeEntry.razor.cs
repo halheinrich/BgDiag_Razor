@@ -75,6 +75,19 @@ namespace BgDiag_Razor.Components;
 /// this component; cube-area clicks on the diagram are no-ops by design. The
 /// decision is entered via the radio group, not via the diagram's hit-regions.
 /// </para>
+///
+/// <para>
+/// <b>Bounded-height contract</b>. The wrapper renders the inner diagram
+/// inside an internal <c>.bg-board-slot</c> div, with the radio row outside
+/// it as a sibling. Give <c>.bg-cube-entry</c> a definite height (a real
+/// <c>height</c>, or shrinkable-flex-item sizing — never <c>max-height</c>
+/// alone) and the board letterboxes to the space the radios don't take,
+/// ratio preserved, while the radios keep their content size. Unbounded
+/// consumers get today's width-driven flow unchanged. The mechanism lives in
+/// the scoped CSS (flex column, shrinkable slot) plus <c>.bg-diagram</c>'s
+/// own contain-fit default; <see cref="BackgammonPlayEntry"/> exposes the
+/// identical structure.
+/// </para>
 /// </summary>
 public partial class BackgammonCubeEntry : ComponentBase
 {
@@ -106,10 +119,10 @@ public partial class BackgammonCubeEntry : ComponentBase
     public RenderFragment? Overlay { get; set; }
 
     /// <summary>
-    /// Fires when both halves of the cube decision have been selected, carrying
-    /// the user's answer as a <see cref="CubeDecisionPair"/>. Re-fires whenever a
-    /// selection changes after completion, so the consumer always holds the
-    /// current complete pair. Does not fire while only one half is selected.
+    /// Fires on each radio selection, carrying the user's answer as a
+    /// <see cref="CubeDecisionPair"/> (one radio sets both halves atomically).
+    /// Re-fires whenever the selection changes, so the consumer always holds
+    /// the current complete pair (no one-shot lock).
     ///
     /// <para>
     /// Marked <see cref="EditorRequiredAttribute"/>: a consumer that omits this

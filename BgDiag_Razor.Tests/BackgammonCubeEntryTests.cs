@@ -91,6 +91,47 @@ public class BackgammonCubeEntryTests : BunitContext
         Assert.Equal(string.Empty, cut.Markup.Trim());
     }
 
+    // -----------------------------------------------------------------------
+    //  Bounded-height contract — board slot structure
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public void BoardSlot_WrapsDiagram_RadiosStayOutside()
+    {
+        // The bounded-height contract's structural half: the diagram sits
+        // inside .bg-board-slot (the shrinkable flex row) and the radio group
+        // is its sibling, outside the slot — that separation is what lets a
+        // consumer-bounded height letterbox the board while the radios keep
+        // their content size. The layout half lives in the scoped CSS and was
+        // validated empirically; bUnit pins the markup structure it needs.
+        var cut = Render<BackgammonCubeEntry>(p => p
+            .Add(c => c.Request, CubeRequest())
+            .Add(c => c.OnCubeDecisionCompleted, (CubeDecisionPair _) => { }));
+
+        // Exactly one slot, a direct child of the wrapper, holding the diagram.
+        var slot = cut.Find(".bg-cube-entry > .bg-board-slot");
+        Assert.NotNull(slot.QuerySelector(".bg-diagram"));
+
+        // The radios are a sibling of the slot, not inside it.
+        Assert.NotNull(cut.Find(".bg-cube-entry > .bg-cube-actions"));
+        Assert.Empty(cut.FindAll(".bg-board-slot .bg-cube-actions"));
+    }
+
+    [Fact]
+    public void BoardSlot_CarriesNoInlineSizing()
+    {
+        // Unbounded no-op guard: the producer's slot is class-only — no inline
+        // style that would impose a bound of its own. Whether the board
+        // letterboxes is decided solely by the consumer bounding the wrapper
+        // (layout behavior validated empirically in a live browser).
+        var cut = Render<BackgammonCubeEntry>(p => p
+            .Add(c => c.Request, CubeRequest())
+            .Add(c => c.OnCubeDecisionCompleted, (CubeDecisionPair _) => { }));
+
+        var slot = cut.Find(".bg-board-slot");
+        Assert.Null(slot.GetAttribute("style"));
+    }
+
     [Fact]
     public void AdditionalAttributes_AreSplattedOnOuterDiv()
     {

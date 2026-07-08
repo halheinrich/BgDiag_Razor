@@ -1,12 +1,14 @@
 @if (_renderedRequest is not null)
 {
     <div class="bg-play-entry" @attributes="AdditionalAttributes">
-        <BackgammonDiagram Request="_renderedRequest"
-                           Options="Options"
-                           Overlay="Overlay"
-                           OnPointClicked="HandlePointClick"
-                           OnBarClicked="HandleBarClick"
-                           OnTrayClicked="HandleTrayClick"
-                           OnDiceClicked="HandleDiceClick" />
+        <div class="bg-board-slot">
+            <BackgammonDiagram Request="_renderedRequest"
+                               Options="Options"
+                               Overlay="Overlay"
+                               OnPointClicked="HandlePointClick"
+                               OnBarClicked="HandleBarClick"
+                               OnTrayClicked="HandleTrayClick"
+                               OnDiceClicked="HandleDiceClick" />
+        </div>
     </div>
 }
