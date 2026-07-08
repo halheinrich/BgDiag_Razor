@@ -92,6 +92,15 @@ public partial class BackgammonPlayEntry : ComponentBase
     public DiagramOptions Options { get; set; } = new();
 
     /// <summary>
+    /// Content forwarded, unchanged, to the inner <see cref="BackgammonDiagram"/>'s
+    /// own <see cref="BackgammonDiagram.Overlay"/> — see that parameter for the
+    /// positioning contract. This component adds no wrapper of its own around it;
+    /// the overlay lands directly on the inner diagram's board box.
+    /// </summary>
+    [Parameter]
+    public RenderFragment? Overlay { get; set; }
+
+    /// <summary>
     /// Fires once when a complete <see cref="Play"/> has been assembled from the
     /// click sequence. Does not fire for pass positions or for partial / illegal
     /// click sequences.

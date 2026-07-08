@@ -308,6 +308,12 @@ All three components live in namespace `BgDiag_Razor.Components`.
 - `DiagramRequest? Request` — the position and match state to render. Null
   renders nothing.
 - `DiagramOptions Options` — rendering options (defaults to `new()`).
+- `RenderFragment? Overlay` — consumer content rendered last inside
+  `.bg-diagram` (the self-sizing board box), above the hit-region overlay.
+  The wrapper is `pointer-events: none`; a consumer opts individual overlay
+  elements back in with their own `pointer-events: auto`. Domain-agnostic —
+  the component owns only the positioning container. Null (default) is a
+  complete no-op: no wrapper markup renders at all.
 - `Dictionary<string, object>? AdditionalAttributes` — splatted onto the
   outer wrapper `div`.
 
@@ -330,6 +336,9 @@ All three components live in namespace `BgDiag_Razor.Components`.
   renders nothing. Cube decisions (`Decision.IsCube == true`) throw
   `NotImplementedException`.
 - `DiagramOptions Options` — forwarded to the inner diagram.
+- `RenderFragment? Overlay` — forwarded, unchanged, to the inner diagram's
+  own `Overlay` (see `BackgammonDiagram` above). This component adds no
+  wrapper of its own around it.
 - `Dictionary<string, object>? AdditionalAttributes` — splatted onto the
   outer wrapper `div`.
 
@@ -361,6 +370,9 @@ All three components live in namespace `BgDiag_Razor.Components`.
   accept an answer against. Null renders nothing. Play decisions
   (`Decision.IsCube == false`) throw `NotImplementedException`.
 - `DiagramOptions Options` — forwarded to the inner diagram.
+- `RenderFragment? Overlay` — forwarded, unchanged, to the inner diagram's
+  own `Overlay` (see `BackgammonDiagram` above). This component adds no
+  wrapper of its own around it.
 - `Dictionary<string, object>? AdditionalAttributes` — splatted onto the
   outer wrapper `div` (`bg-cube-entry`). Not forwarded to the inner diagram.
 

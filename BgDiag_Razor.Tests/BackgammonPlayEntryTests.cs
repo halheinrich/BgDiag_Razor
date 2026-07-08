@@ -216,6 +216,26 @@ public class BackgammonPlayEntryTests : BunitContext
         Assert.Contains("data-testid=\"play-entry-1\"", cut.Markup);
     }
 
+    [Fact]
+    public void Overlay_Unset_IsCompleteNoOp()
+    {
+        var cut = Render<BackgammonPlayEntry>(p => p
+            .Add(c => c.Request, StandardRequest()));
+
+        Assert.DoesNotContain("bg-diagram-overlay", cut.Markup);
+    }
+
+    [Fact]
+    public void Overlay_Supplied_ForwardsToInnerDiagram()
+    {
+        var cut = Render<BackgammonPlayEntry>(p => p
+            .Add(c => c.Request, StandardRequest())
+            .Add(c => c.Overlay, builder => builder.AddMarkupContent(0, "<div class=\"my-badge\">XGID</div>")));
+
+        var overlay = cut.Find(".bg-diagram-overlay");
+        Assert.Contains("my-badge", overlay.InnerHtml);
+    }
+
     // -----------------------------------------------------------------------
     //  Cube decision guard
     // -----------------------------------------------------------------------

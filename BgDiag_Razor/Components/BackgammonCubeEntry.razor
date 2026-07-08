@@ -1,7 +1,7 @@
 @if (Request is not null)
 {
     <div class="bg-cube-entry" @attributes="AdditionalAttributes">
-        <BackgammonDiagram Request="Request" Options="Options" />
+        <BackgammonDiagram Request="Request" Options="Options" Overlay="Overlay" />
         <div class="bg-cube-actions" role="radiogroup" aria-label="Cube decision">
             @foreach (var (label, pair) in _cubeOptions)
             {

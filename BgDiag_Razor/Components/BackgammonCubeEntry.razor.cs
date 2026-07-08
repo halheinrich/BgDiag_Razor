@@ -97,6 +97,15 @@ public partial class BackgammonCubeEntry : ComponentBase
     public DiagramOptions Options { get; set; } = new();
 
     /// <summary>
+    /// Content forwarded, unchanged, to the inner <see cref="BackgammonDiagram"/>'s
+    /// own <see cref="BackgammonDiagram.Overlay"/> — see that parameter for the
+    /// positioning contract. This component adds no wrapper of its own around it;
+    /// the overlay lands directly on the inner diagram's board box.
+    /// </summary>
+    [Parameter]
+    public RenderFragment? Overlay { get; set; }
+
+    /// <summary>
     /// Fires when both halves of the cube decision have been selected, carrying
     /// the user's answer as a <see cref="CubeDecisionPair"/>. Re-fires whenever a
     /// selection changes after completion, so the consumer always holds the

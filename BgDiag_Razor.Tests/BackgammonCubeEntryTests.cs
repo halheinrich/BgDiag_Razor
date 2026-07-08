@@ -102,6 +102,28 @@ public class BackgammonCubeEntryTests : BunitContext
         Assert.Contains("data-testid=\"cube-entry-1\"", cut.Markup);
     }
 
+    [Fact]
+    public void Overlay_Unset_IsCompleteNoOp()
+    {
+        var cut = Render<BackgammonCubeEntry>(p => p
+            .Add(c => c.Request, CubeRequest())
+            .Add(c => c.OnCubeDecisionCompleted, (CubeDecisionPair _) => { }));
+
+        Assert.DoesNotContain("bg-diagram-overlay", cut.Markup);
+    }
+
+    [Fact]
+    public void Overlay_Supplied_ForwardsToInnerDiagram()
+    {
+        var cut = Render<BackgammonCubeEntry>(p => p
+            .Add(c => c.Request, CubeRequest())
+            .Add(c => c.OnCubeDecisionCompleted, (CubeDecisionPair _) => { })
+            .Add(c => c.Overlay, builder => builder.AddMarkupContent(0, "<div class=\"my-badge\">XGID</div>")));
+
+        var overlay = cut.Find(".bg-diagram-overlay");
+        Assert.Contains("my-badge", overlay.InnerHtml);
+    }
+
     // -----------------------------------------------------------------------
     //  Symmetric guard — play decisions are rejected at the contract boundary
     // -----------------------------------------------------------------------
