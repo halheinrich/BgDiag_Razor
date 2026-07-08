@@ -121,7 +121,11 @@ component holds no renderer state, only the cached outputs.
   the self-sizing pitfall). The ratio is render-time dynamic (it tracks
   `DiagramOptions.Aspect`), which is why it is injected inline rather than
   living in scoped CSS, and it is sourced from the same viewBox the overlay
-  uses so the ratio has a single source.
+  uses so the ratio has a single source. The style also carries the
+  contain-fit default — `max-height: 100%; margin-inline: auto` — so a
+  consumer that gives the containing block a *definite* height gets a
+  centered letterbox for free, while unbounded (width-driven) flows are
+  untouched (see the contain-fit pitfall).
 
 The markup then injects `_svgMarkup` via `(MarkupString)_svgMarkup` inside a
 child `div` that has `pointer-events: none` so clicks fall through to the
@@ -479,7 +483,25 @@ back, so the play-entry-style `UndoLast` / `UndoAll` does not apply.
   consumer that pins *both* (e.g. `width: 100%; height: 100%`) makes
   `aspect-ratio` a no-op (both definite); (2) passing `style` through
   `AdditionalAttributes` overrides the inline style and drops the injected
-  ratio, so prefer sizing via the container over a `style` splat.
+  ratio *and* the contain-fit default below, so prefer sizing via the
+  container over a `style` splat.
+- **Contain-fit default rides the same inline style.** `.bg-diagram` also
+  carries `max-height: 100%; margin-inline: auto`. When the containing block
+  has a *definite* height, the board caps to it and the width re-derives
+  through the aspect-ratio (CSS transfers the max constraint across the
+  ratio), centering the letterboxed board in its row. In an unbounded flow
+  both declarations are inert — a percentage max-height against an indefinite
+  containing-block height computes to `none`, and the auto margins are zero
+  while the box fills its row — so width-driven consumers (e.g. a plain
+  `max-width` container) are unchanged. The bound must be *definite*: a
+  `max-height` on an auto-height ancestor never reaches the percentage
+  (browsers size flex/block content before clamping, so the content just
+  overflows the clamp — verified empirically). Bound with a real `height`,
+  or make the ancestor a shrinkable flex item (`flex: 1 1 0; min-height: 0`
+  in a definite-height column), never with `max-height` alone. Because the
+  declaration is inline, a consumer stylesheet cannot override it without
+  `!important`; a consumer that genuinely wants overflow instead of
+  contain-fit should size the container, not fight the default.
 
 ## Subproject-internal next steps
 

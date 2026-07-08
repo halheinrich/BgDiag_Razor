@@ -227,6 +227,25 @@ public class BackgammonDiagramTests : BunitContext
         Assert.NotEqual(wideStyle, standardStyle);
     }
 
+    [Fact]
+    public void Root_CarriesContainFitDefault()
+    {
+        // The bounded-height contract: the root's inline style caps the box to
+        // its containing block's definite height (max-height) and centers the
+        // letterboxed board in its row (auto inline margins). Both declarations
+        // are inert in an unbounded flow — a percentage max-height against an
+        // indefinite containing-block height computes to none, and auto margins
+        // are zero while the box fills its row — so width-driven consumers see
+        // no change (validated empirically; bUnit can pin only the emitted style).
+        var cut = Render<BackgammonDiagram>(parameters => parameters
+            .Add(p => p.Request, DefaultRequest)
+            .Add(p => p.Options, new DiagramOptions()));
+
+        var style = cut.Find(".bg-diagram").GetAttribute("style");
+        Assert.Contains("max-height: 100%", style);
+        Assert.Contains("margin-inline: auto", style);
+    }
+
     // -----------------------------------------------------------------------
     //  Overlay slot: consumer-supplied content positioned on the board
     // -----------------------------------------------------------------------

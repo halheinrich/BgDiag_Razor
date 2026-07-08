@@ -85,6 +85,18 @@ public partial class BackgammonDiagram : ComponentBase
     /// dynamic (it tracks <see cref="DiagramOptions.Aspect"/>), so it lives
     /// here, inline, sourced from the same <see cref="BoardHitRegions.ViewBox"/>
     /// the overlay uses — one source, no literal.
+    ///
+    /// <para>
+    /// The style also carries the <b>contain-fit default</b>:
+    /// <c>max-height: 100%</c> plus <c>margin-inline: auto</c>. When a consumer
+    /// gives the containing block a <em>definite</em> height, the board caps to
+    /// it and the width re-derives through the aspect-ratio (CSS transfers the
+    /// max constraint across the ratio), letterboxing the board centered in its
+    /// row. In an unbounded flow both declarations are inert — a percentage
+    /// max-height against an indefinite containing-block height computes to
+    /// <c>none</c>, and the auto margins are zero while the box fills its row —
+    /// so width-driven consumers are unaffected.
+    /// </para>
     /// </summary>
     private string? _rootStyle;
 
@@ -107,6 +119,6 @@ public partial class BackgammonDiagram : ComponentBase
 
         var viewBox = _hitRegions.ViewBox;
         _rootStyle = FormattableString.Invariant(
-            $"position: relative; aspect-ratio: {viewBox.Width} / {viewBox.Height};");
+            $"position: relative; aspect-ratio: {viewBox.Width} / {viewBox.Height}; max-height: 100%; margin-inline: auto;");
     }
 }
