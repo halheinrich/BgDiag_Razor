@@ -43,5 +43,11 @@
                 }
             </svg>
         }
+        @if (Overlay is not null)
+        {
+            <div class="bg-diagram-overlay" style="position: absolute; inset: 0; pointer-events: none;">
+                @Overlay
+            </div>
+        }
     </div>
 }

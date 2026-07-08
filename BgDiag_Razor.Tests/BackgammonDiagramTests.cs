@@ -228,6 +228,58 @@ public class BackgammonDiagramTests : BunitContext
     }
 
     // -----------------------------------------------------------------------
+    //  Overlay slot: consumer-supplied content positioned on the board
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public void Overlay_Unset_IsCompleteNoOp()
+    {
+        var cut = Render<BackgammonDiagram>(parameters => parameters
+            .Add(p => p.Request, DefaultRequest)
+            .Add(p => p.Options, new DiagramOptions()));
+
+        Assert.DoesNotContain("bg-diagram-overlay", cut.Markup);
+    }
+
+    [Fact]
+    public void Overlay_Supplied_RendersInsideBgDiagram()
+    {
+        var cut = Render<BackgammonDiagram>(parameters => parameters
+            .Add(p => p.Request, DefaultRequest)
+            .Add(p => p.Options, new DiagramOptions())
+            .Add(p => p.Overlay, builder => builder.AddMarkupContent(0, "<div class=\"my-badge\">XGID</div>")));
+
+        var root = cut.Find(".bg-diagram");
+        var overlay = root.QuerySelector(".bg-diagram-overlay");
+        Assert.NotNull(overlay);
+        Assert.Contains("my-badge", overlay!.InnerHtml);
+    }
+
+    [Fact]
+    public void Overlay_Wrapper_HasPointerEventsNone_SoItNeverBlocksBoardClicks()
+    {
+        var cut = Render<BackgammonDiagram>(parameters => parameters
+            .Add(p => p.Request, DefaultRequest)
+            .Add(p => p.Options, new DiagramOptions())
+            .Add(p => p.Overlay, builder => builder.AddMarkupContent(0, "<div class=\"my-badge\">XGID</div>")));
+
+        var style = cut.Find(".bg-diagram-overlay").GetAttribute("style");
+        Assert.Contains("pointer-events: none", style);
+    }
+
+    [Fact]
+    public void NullRequest_OverlaySupplied_StillRendersEmpty()
+    {
+        // A null Request is the component's other no-op path; Overlay must
+        // not force markup out when there's no board to overlay it on.
+        var cut = Render<BackgammonDiagram>(parameters => parameters
+            .Add(p => p.Request, null)
+            .Add(p => p.Overlay, builder => builder.AddMarkupContent(0, "<div class=\"my-badge\">XGID</div>")));
+
+        Assert.Equal(string.Empty, cut.Markup.Trim());
+    }
+
+    // -----------------------------------------------------------------------
     //  Orientation tests
     // -----------------------------------------------------------------------
 

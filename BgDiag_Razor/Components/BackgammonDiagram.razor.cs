@@ -17,6 +17,27 @@ public partial class BackgammonDiagram : ComponentBase
     public DiagramOptions Options { get; set; } = new();
 
     // -----------------------------------------------------------------------
+    //  Consumer overlay — arbitrary content positioned on the board box
+    // -----------------------------------------------------------------------
+
+    /// <summary>
+    /// Content rendered on top of the board, inside <c>.bg-diagram</c> — the
+    /// element that carries the board's <c>aspect-ratio</c> and is therefore
+    /// the only thing that reliably tracks the rendered board box, including
+    /// when a consumer's own sizing (e.g. <c>max-height</c>) letterboxes it
+    /// narrower than its container. A consumer positions its own markup
+    /// (absolute, within this box) rather than reconstructing the board's
+    /// geometry from outside. This component stays domain-agnostic: it owns
+    /// only the positioning container, not the overlay's content or
+    /// interactivity, which remain the consumer's <see cref="RenderFragment"/>.
+    /// The wrapper is pointer-events: none so it never blocks board clicks;
+    /// a consumer opts individual overlay elements back in with their own
+    /// pointer-events: auto.
+    /// </summary>
+    [Parameter]
+    public RenderFragment? Overlay { get; set; }
+
+    // -----------------------------------------------------------------------
     //  Interactivity — wired to transparent click overlay
     // -----------------------------------------------------------------------
 
