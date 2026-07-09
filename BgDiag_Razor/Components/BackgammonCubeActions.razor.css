@@ -1,0 +1,51 @@
+/* Cube-decision radio pills. Scoped to BackgammonCubeActions — styles the four
+   mutually-exclusive options rendered by the .razor. Each option is a <label>
+   wrapping its own <input type="radio"> + caption, so the radio and its text
+   read as one clickable unit and the row spaces the four apart.
+
+   Sizing posture: compact and inline-flow-friendly by intent. The root is an
+   inline-flex row that takes only its content size and carries no external
+   margins; each pill's height falls out of its own padding + line-height —
+   roughly a standard button's height, without encoding any consumer's button
+   metrics. The consumer places the row (e.g. inline beside its own buttons)
+   and owns the spacing around it. */
+
+.bg-cube-actions {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.bg-cube-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;                 /* clear space between a radio and its caption */
+    padding: 0.5rem 0.9rem;
+    border: 1px solid #cbd2d9;
+    border-radius: 0.5rem;
+    background: #fff;
+    cursor: pointer;
+    user-select: none;
+    line-height: 1.2;
+    transition: background-color 0.12s ease, border-color 0.12s ease;
+}
+
+.bg-cube-action:hover {
+    border-color: #8a94a6;
+    background: #f4f6f8;
+}
+
+.bg-cube-action input[type="radio"] {
+    margin: 0;
+    cursor: pointer;
+}
+
+/* Doubled class so the selected state outranks :hover (equal specificity, but
+   this rule comes later) — a selected pill stays highlighted while hovered. */
+.bg-cube-action.bg-cube-action-selected,
+.bg-cube-action.bg-cube-action-selected:hover {
+    border-color: #2f6fed;
+    background: #e8f0fe;
+    font-weight: 600;
+}

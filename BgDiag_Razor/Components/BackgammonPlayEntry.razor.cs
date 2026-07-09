@@ -61,8 +61,9 @@ namespace BgDiag_Razor.Components;
 /// <b>Cube decisions</b> (signalled by <c>Decision.IsCube == true</c>; in the data
 /// layer this also coincides with <c>Dice == [0, 0]</c>) are not supported by this
 /// component; constructing one throws <see cref="NotImplementedException"/>.
-/// Route cube decisions to <see cref="BackgammonCubeEntry"/>, the sibling component
-/// that owns the cube path.
+/// Cube decisions have no click-by-click board state, so no entry wrapper exists
+/// for them: render the position with the view-only <see cref="BackgammonDiagram"/>
+/// and enter the answer with the free-standing <see cref="BackgammonCubeActions"/>.
 /// </para>
 ///
 /// <para>
@@ -79,8 +80,7 @@ namespace BgDiag_Razor.Components;
 /// <c>max-height</c> alone) and the board letterboxes to it, ratio preserved;
 /// unbounded consumers get today's width-driven flow unchanged. The mechanism
 /// lives in the scoped CSS (flex column, shrinkable slot) plus
-/// <c>.bg-diagram</c>'s own contain-fit default; <see cref="BackgammonCubeEntry"/>
-/// exposes the identical structure with its radio row outside the slot.
+/// <c>.bg-diagram</c>'s own contain-fit default.
 /// </para>
 /// </summary>
 public partial class BackgammonPlayEntry : ComponentBase
@@ -178,7 +178,8 @@ public partial class BackgammonPlayEntry : ComponentBase
         {
             throw new NotImplementedException(
                 "Cube decisions are not handled by BackgammonPlayEntry. " +
-                "Route cube decisions to BackgammonCubeEntry.");
+                "Render the position with BackgammonDiagram and enter the answer " +
+                "with BackgammonCubeActions.");
         }
 
         var mop = Request.Position.Mop;

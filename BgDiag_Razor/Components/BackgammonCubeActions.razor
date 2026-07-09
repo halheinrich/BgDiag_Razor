@@ -1,0 +1,14 @@
+<div class="bg-cube-actions" role="radiogroup" aria-label="Cube decision" @attributes="AdditionalAttributes">
+    @foreach (var (label, pair) in _cubeOptions)
+    {
+        var selected = Value == pair;
+        <label class="bg-cube-action@(selected ? " bg-cube-action-selected" : "")">
+            <input type="radio"
+                   name="@_groupName"
+                   value="@label"
+                   checked="@selected"
+                   @onchange="() => HandleSelected(pair)" />
+            @label
+        </label>
+    }
+</div>

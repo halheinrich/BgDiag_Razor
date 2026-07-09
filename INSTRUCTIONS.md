@@ -27,7 +27,7 @@ https://github.com/halheinrich/BgDiag_Razor — branch `main`.
   `CubeDecisionPair` (readonly record struct). Move primitives and the
   mutable board live in the shared-data layer; consumed here by
   `BackgammonPlayEntry` (`Play` on the public surface, `BoardState.FromMop`
-  for state construction), by `BackgammonCubeEntry` (`CubeAction` for its
+  for state construction), by `BackgammonCubeActions` (`CubeAction` for its
   radio options, `CubeDecisionPair` on the public surface), and by tests.
   Referenced as a project reference (also reachable transitively via
   BackgammonDiagram_Lib and BgMoveGen, but the explicit ref documents the
@@ -37,9 +37,10 @@ https://github.com/halheinrich/BgDiag_Razor — branch `main`.
   project reference. Transitively brings `BgMoveGen`'s standalone surface;
   this subproject does not consume the NativeAOT interop layer.
 
-`BackgammonCubeEntry` consumes `CubeAction` / `CubeDecisionPair` from
-`BgDataTypes_Lib` for its two-group atomic decision surface. No `BgMoveGen`
-use — cube decisions have no checker-move state to drive.
+`BackgammonCubeActions` consumes `CubeAction` / `CubeDecisionPair` from
+`BgDataTypes_Lib` for its atomic decision surface. No `BgMoveGen` use — cube
+decisions have no checker-move state to drive — and no
+`BackgammonDiagram_Lib` use: the answer row is board-free.
 
 ## Directory tree
 
@@ -56,15 +57,15 @@ BgDiag_Razor/
     BackgammonPlayEntry.razor         — wraps BackgammonDiagram, drives state
     BackgammonPlayEntry.razor.cs      — code-behind, parameters, click routing
     BackgammonPlayEntry.razor.css     — scoped: bounded-height board slot
-    BackgammonCubeEntry.razor         — wraps BackgammonDiagram, four cube radios
-    BackgammonCubeEntry.razor.cs      — code-behind, parameters, decision routing
-    BackgammonCubeEntry.razor.css     — scoped: board slot + radio pills
+    BackgammonCubeActions.razor       — free-standing four-radio cube answer row
+    BackgammonCubeActions.razor.cs    — code-behind, controlled-value contract
+    BackgammonCubeActions.razor.css   — scoped: radio pills
   wwwroot/
 BgDiag_Razor.Tests/
   BgDiag_Razor.Tests.csproj
   BackgammonDiagramTests.cs           — bUnit rendering + event-callback tests
   BackgammonPlayEntryTests.cs         — bUnit play-entry contract tests
-  BackgammonCubeEntryTests.cs         — bUnit cube-entry contract tests
+  BackgammonCubeActionsTests.cs       — bUnit cube-actions contract tests
 ```
 
 ## Architecture
@@ -76,7 +77,7 @@ Blazor / Razor dependency. All SVG generation and hit-region geometry lives
 in the core lib; this project only binds that output into a Blazor component
 and surfaces click events.
 
-### Three components: view-only, play-entry, cube-entry
+### Three components: view-only, play-entry, cube-actions
 
 `BackgammonDiagram` is the **view-only primitive** — given a `DiagramRequest`
 it renders the position and surfaces click events. It holds no
@@ -90,19 +91,24 @@ each legal click and reporting the assembled `Play` once the user has
 clicked a complete legal sequence. Handles play decisions only
 (`Decision.IsCube == false`); cube decisions throw at the contract boundary.
 
-`BackgammonCubeEntry` is the **cube-entry sibling** to `BackgammonPlayEntry`
-— it composes `BackgammonDiagram` and presents the cube decision as four
-mutually-exclusive radio options (a bijection onto the four
-`CubeDecisionPair` values), firing `EventCallback<CubeDecisionPair>` on each
-selection. It emits the user's raw answer; scoring it against the correct
-action is the future quiz layer's job. Handles cube decisions only
-(`Decision.IsCube == true`); play decisions throw at the contract boundary.
-Consumers route by `Decision.IsCube`.
+`BackgammonCubeActions` is the **free-standing cube answer row** — four
+mutually-exclusive radio pills (a bijection onto the four `CubeDecisionPair`
+values) with a controlled `Value` / `ValueChanged` contract (`@bind-Value`
+capable). It renders no board and takes no `DiagramRequest`: a cube decision
+has no click-by-click board state, so — unlike the play half — there is
+nothing for an entry wrapper to encapsulate. Cube consumers render the
+position with `BackgammonDiagram` and place the answer row wherever their
+layout wants it (e.g. inline in a button row), keeping the board region
+board-only. It emits the user's raw answer; scoring it against the correct
+action is the quiz layer's job.
 
 The split keeps the encapsulation rule clean: a consumer that just wants to
-display a position should not pay for click-by-click state machinery, and a
-consumer driving an interactive decision should not have to wire state
-externally to a view-only component or branch internally on cube vs play.
+display a position should not pay for click-by-click state machinery, a
+play consumer should not have to wire move-entry state externally to a
+view-only component, and a cube consumer should not have to accept a
+board-bundled layout just to get four radios. Consumers route by
+`Decision.IsCube`: play decisions → `BackgammonPlayEntry`; cube decisions →
+`BackgammonDiagram` + `BackgammonCubeActions`.
 
 ### Render pipeline
 
@@ -211,81 +217,85 @@ problem unambiguously resets.
 
 Cube decisions (signaled by `Decision.IsCube == true`) are not handled by
 `BackgammonPlayEntry`. `OnParametersSet` throws `NotImplementedException`
-naming `BackgammonCubeEntry` as the correct sibling. The intent is to fail
-loudly at the contract boundary rather than silently render an unusable
-widget. `BackgammonCubeEntry` carries the symmetric guard — play decisions
-throw on it.
+naming the correct composition (`BackgammonDiagram` for the position,
+`BackgammonCubeActions` for the answer). The intent is to fail loudly at
+the contract boundary rather than silently render an unusable widget. There
+is no symmetric guard on the cube side: `BackgammonCubeActions` takes no
+request, so it has nothing to reject — routing by `Decision.IsCube` stays
+consumer-side.
 
-### BackgammonCubeEntry — render pipeline
+### BackgammonCubeActions — markup and options
 
-`BackgammonCubeEntry` takes the same `DiagramRequest` / `DiagramOptions`
-shape as `BackgammonPlayEntry` plus an
-`EventCallback<CubeDecisionPair> OnCubeDecisionCompleted`. The composition
-is structurally simpler than the play-entry widget:
-
-- The inner `BackgammonDiagram` receives `Request` unchanged — cube
-  decisions do not transform the position, so there is no Mop rebuilding
-  step and no `_renderedRequest` cache.
-- No `MoveEntryState`, no `BgMoveGen` dependency.
-- A single `role="radiogroup"` row (`bg-cube-actions`) renders beside the
-  board slot (see the bounded-height contract below) inside the
-  `bg-cube-entry` wrapper, holding four
-  mutually-exclusive options — a bijection onto the four `CubeDecisionPair`
-  values: "No double" (NoDouble, Take), "Double/Take" (Double, Take),
-  "Double/Pass" (Double, Pass), and "Too good" (NoDouble, Pass). The two
-  no-double options use their standard backgammon names and omit the
-  redundant taker half — a taker action is only reached when the doubler
-  doubles. Each option is a `<label class="bg-cube-action">` wrapping its
-  own `<input type="radio">`; the selected option additionally carries
-  `bg-cube-action-selected` for a visible selected state.
+`BackgammonCubeActions` renders a single `role="radiogroup"` row
+(`bg-cube-actions`) holding four mutually-exclusive options — a bijection
+onto the four `CubeDecisionPair` values: "No double" (NoDouble, Take),
+"Double/Take" (Double, Take), "Double/Pass" (Double, Pass), and "Too good"
+(NoDouble, Pass). The two no-double options use their standard backgammon
+names and omit the redundant taker half — a taker action is only reached
+when the doubler doubles. Each option is a `<label class="bg-cube-action">`
+wrapping its own `<input type="radio">`; the selected option additionally
+carries `bg-cube-action-selected` for a visible selected state.
 
 The four `(label, pair)` mappings are one private static table in the
 code-behind. Single-sourced for now; if a second consumer ever needs the
 same labels, lift to a shared helper at that point.
 
-`AdditionalAttributes` is splatted onto `BackgammonCubeEntry`'s own outer
-`bg-cube-entry` wrapper `div`, parallel to `BackgammonPlayEntry`'s
-`bg-play-entry` wrapper. Consumers that style the cube-entry widget
-target `bg-cube-entry`; the radio row is `bg-cube-actions`.
+The radio `name` is generated per instance, so two rows on one page never
+cross-link their browser-native mutual exclusion. It is internal — consumers
+interact only through `Value` / `ValueChanged`.
 
-### BackgammonCubeEntry — selection, re-fire, and reset
+`AdditionalAttributes` is splatted onto the root `bg-cube-actions` `div`.
+Consumers that style the row target `bg-cube-actions`; the pills are
+`bg-cube-action`.
 
-The component holds a single provisional field,
-`CubeDecisionPair? _selection`. Selecting a radio records its pair, marks
-it selected, and fires `OnCubeDecisionCompleted` with the pair; selecting
-a different option replaces the selection and re-fires with the new pair,
-so the consumer always holds the current complete answer. One radio sets
-both halves atomically, so there is no half-selected state — the "does not
-fire while incomplete" contract is trivially preserved.
+**Sizing posture** (deliberate, documented intent): the pills are compact
+and inline-flow-friendly — the root is an inline-flex row that takes only
+its content size and carries no external margins, and each pill's height
+falls out of its own padding + line-height (roughly a standard button's
+height, without encoding any consumer's button metrics). The consumer
+places the row (e.g. inline beside its own buttons) and owns the spacing
+around it.
+
+### BackgammonCubeActions — controlled value contract
+
+The component is **strictly controlled**: the selected pill is whatever the
+`CubeDecisionPair? Value` parameter says, and the component holds no
+selection state of its own. Selecting a radio invokes
+`ValueChanged` with that option's pair — never null (radios cannot
+deselect), and never "incomplete" (one radio sets both halves atomically,
+so there is no half-selected state). The selection sticks only once the
+consumer writes the value back into `Value`, which `@bind-Value` does
+automatically. Switching options re-fires with the new pair, so the
+consumer always holds the latest complete answer (no one-shot lock).
 
 Because each option pairs a doubler-half action with a taker-half action,
 the `CubeDecisionPair` constructed here always satisfies that type's
 half-guards — construction never throws in this component. The component
-emits the raw answer only; it does not encode which option is correct, and
-holds no aggregate "is this the right cube action" judgment. Scoring the
-pair is the future quiz layer's responsibility.
+emits the raw answer only; it does not encode which option is correct.
+Scoring the pair is the quiz layer's responsibility.
 
-**Reset semantics** mirror `BackgammonPlayEntry`'s value-equality key,
-with dice dropped: cube decisions carry no dice (`[0, 0]` by the data-layer
-invariant), so the starting `Position.Mop` alone identifies the problem.
-`_selection` resets to null only when the incoming `Request`'s `Mop`
-differs value-wise from the cached one; re-passing the same logical
-position — even a distinct object reference — preserves provisional state.
+**Reset semantics**: there are none to encode — with no request and no
+internal state, clearing between problems is the consumer's move (set
+`Value` to null when advancing). This deliberately removes the
+parallel-state copy the old bundled wrapper kept (`_selection` plus a
+Mop-keyed reset): the consumer already tracks the current answer to drive
+its own submit affordance, and that single field is now the only copy.
 
 ### Bounded-height contract — the board slot
 
-Both entry wrappers render the inner `BackgammonDiagram` inside an internal
-`bg-board-slot` div — the board's dedicated flex row — with any sibling
-chrome (the cube radios) outside it as a sibling of the slot. Each wrapper's
-scoped CSS makes the wrapper a flex column and the slot the shrinkable row
-(`min-height: 0`; deliberately the default `flex: 0 1 auto`, so the slot
-shrinks under a bound but never grows), while chrome keeps its content size
-(`flex: none`). The contract:
+`BackgammonPlayEntry` (the one entry wrapper) renders the inner
+`BackgammonDiagram` inside an internal `bg-board-slot` div — the board's
+dedicated flex row. The wrapper's scoped CSS makes the wrapper a flex column
+and the slot the shrinkable row (`min-height: 0`; deliberately the default
+`flex: 0 1 auto`, so the slot shrinks under a bound but never grows). The
+wrapper has no sibling chrome today; the slot keeps the height-cappable
+structure explicit so chrome can join it later (as `flex: none` siblings of
+the slot) without changing the consumer contract. The contract:
 
 - **Bounded:** a consumer that gives the wrapper a *definite* height (a real
   `height`, or shrinkable-flex-item sizing — see Pitfalls) gets a letterboxed
-  board: the slot shrinks to the space the chrome doesn't take, its post-flex
-  height becomes definite, and `.bg-diagram`'s own contain-fit default
+  board: the slot shrinks to the bound, its post-flex height becomes
+  definite, and `.bg-diagram`'s own contain-fit default
   (`max-height: 100%`, auto inline margins) caps the board to it, the width
   re-deriving through the ratio. The ratio keeps living where it lives today
   — on `.bg-diagram`, sourced from the viewBox.
@@ -293,12 +303,6 @@ shrinks under a bound but never grows), while chrome keeps its content size
   auto height stacks like block flow, the slot never grows, and the
   contain-fit percentage resolves to none. Validated empirically (live
   browser, proposed-vs-previous structures pixel-identical).
-
-The slot structure is stated twice — once per entry's scoped CSS file —
-deliberately: Blazor scopes CSS per component, and the alternative (a plain
-`wwwroot` stylesheet) is not auto-bundled into a consumer's
-`{App}.styles.css`, which would add a manual link-tag step to every
-consumer. The two files cross-reference each other; keep them in step.
 
 ### Click index conventions
 
@@ -321,13 +325,16 @@ primitive (markup, hit-region overlay, callback wiring). `BackgammonPlayEntryTes
 cover the play-entry contract: legal-completion firing, illegal no-ops,
 post-completion no-ops, undo round-trip via replay, value-equality reset on
 `(Mop, Dice)` change, identity preservation on equal `(Mop, Dice)`,
-cube-decision rejection. `BackgammonCubeEntryTests` cover the cube-entry
-contract: render shape (inner diagram + the four-option radio group),
-null-request empty render, splat surface, play-decision rejection (symmetric
-guard), each radio fires `OnCubeDecisionCompleted` exactly once with its
-matching `CubeDecisionPair` (parameterized over the four-option bijection),
-switching radios re-fires with the new pair, and the selected option carries
-the `bg-cube-action-selected` state class.
+cube-decision rejection. `BackgammonCubeActionsTests` cover the cube-actions
+contract: render shape (one radio group, four options, all bijection
+labels), splat surface, `Value` marks exactly the matching option selected
+(parameterized over the four-option bijection), clearing `Value` clears the
+selection (the consumer's advance-to-next-problem path), strictly-controlled
+no-stick without a value writeback, each radio fires `ValueChanged` exactly
+once with its matching `CubeDecisionPair` (parameterized), switching radios
+re-fires with the new pair, the controlled writeback round trip (the
+`@bind-Value` wiring), and instance-unique radio group names across two
+rendered rows.
 
 ## Public API
 
@@ -403,34 +410,33 @@ pitfalls.
 board (via the internal `bg-board-slot`); leave it unbounded for width-driven
 flow. See "Bounded-height contract" in Architecture and its Pitfalls.
 
-### `BackgammonCubeEntry`
+### `BackgammonCubeActions`
 
 **Parameters:**
 
-- `DiagramRequest? Request` (required) — the cube decision to render and
-  accept an answer against. Null renders nothing. Play decisions
-  (`Decision.IsCube == false`) throw `NotImplementedException`.
-- `DiagramOptions Options` — forwarded to the inner diagram.
-- `RenderFragment? Overlay` — forwarded, unchanged, to the inner diagram's
-  own `Overlay` (see `BackgammonDiagram` above). This component adds no
-  wrapper of its own around it.
+- `CubeDecisionPair? Value` — the currently selected answer; null means
+  nothing selected. Strictly controlled: the component renders selection
+  from this parameter alone and never selects on its own. Set to null to
+  clear the row when advancing to a new problem.
+- `EventCallback<CubeDecisionPair?> ValueChanged` (**required**,
+  `[EditorRequired]`) — fires on each radio selection with the chosen pair
+  (never null; one radio sets both halves atomically). Re-fires whenever
+  the selection changes (no one-shot lock). Pairs with `Value` for
+  `@bind-Value`.
 - `Dictionary<string, object>? AdditionalAttributes` — splatted onto the
-  outer wrapper `div` (`bg-cube-entry`). Not forwarded to the inner diagram.
+  root `div` (`bg-cube-actions`).
 
-**EventCallbacks:**
-
-- `EventCallback<CubeDecisionPair> OnCubeDecisionCompleted` (**required**,
-  `[EditorRequired]`) — fires on each radio selection, carrying the user's
-  answer as a `CubeDecisionPair` (one radio sets both halves atomically).
-  Re-fires whenever the selection changes (no one-shot lock).
+No `Request`, no `Options`, no `Overlay` — the row is board-free. Cube
+consumers render the position separately with `BackgammonDiagram` (which
+letterboxes by itself via its contain-fit default) and place this row in
+their own chrome.
 
 **Imperative methods:** none. Cube decisions have no sub-state worth rolling
 back, so the play-entry-style `UndoLast` / `UndoAll` does not apply.
 
-**Sizing contract:** give `bg-cube-entry` a definite height to letterbox the
-board while the radios keep their content size; leave it unbounded for
-width-driven flow. See "Bounded-height contract" in Architecture and its
-Pitfalls.
+**Sizing contract:** content-sized, inline-flow-friendly, no external
+margins — see "Sizing posture" in Architecture. The consumer owns placement
+and surrounding spacing.
 
 ## BackgammonPlayEntry — pitfalls
 
@@ -447,47 +453,48 @@ Pitfalls.
   pass positions via their own skip-to-next-problem flow.
 - **Cube decisions are rejected at the contract boundary.** A `DiagramRequest`
   with `Decision.IsCube == true` throws `NotImplementedException` from
-  `OnParametersSet`. Route cube decisions to `BackgammonCubeEntry`, which
-  carries the symmetric guard on play decisions.
+  `OnParametersSet`. Render cube positions with `BackgammonDiagram` and
+  enter the answer with `BackgammonCubeActions`; there is no cube-side
+  guard to catch a misroute (the row is request-free), so the `IsCube`
+  branch lives with the consumer.
 - **The inner diagram's cube hit region still renders** (because
   `BackgammonDiagram` always wires it) but `BackgammonPlayEntry` does not
   subscribe; cube-area clicks during play entry are no-ops by design.
 
-## BackgammonCubeEntry — pitfalls
+## BackgammonCubeActions — pitfalls
 
-- **Play decisions are rejected at the contract boundary.** A
-  `DiagramRequest` with `Decision.IsCube == false` throws
-  `NotImplementedException` from `OnParametersSet`. Route play decisions to
-  `BackgammonPlayEntry` (which carries the symmetric guard). Consumers
-  branch on `Request.Decision.IsCube`; do not pass a play request to this
-  component "to render the position without buttons" — the guard is
-  deliberate.
-- **The inner diagram's cube hit region still renders** (because
-  `BackgammonDiagram` always wires it) but `BackgammonCubeEntry` does not
-  subscribe; cube-region clicks on the diagram are no-ops by design. The
-  decision is entered via the radio group (`bg-cube-actions`), not via the
-  diagram's hit-regions.
-- **`OnCubeDecisionCompleted` is `[EditorRequired]`.** Unlike the sibling
-  `BackgammonPlayEntry.OnPlayCompleted`, this callback is marked required so
-  a Razor consumer that omits it — or, after a future rename, leaves a stale
-  attribute on the tag — surfaces the missing binding as an `RZ2012` compile
-  warning rather than splatting silently (Razor does not error on
-  unrecognized component attributes). Build with warnings-as-errors to make
-  that a hard gate. The sibling could adopt the same guard later.
-- **Fires on every selection, and re-fires on switches.** There is no
-  one-shot lock: each radio selection fires with its pair (one radio sets
-  both halves atomically, so there is no half-selected state), and every
-  subsequent switch re-fires with the updated pair. A consumer wanting
-  one-shot semantics advances to the next problem on the first callback.
-  Tests pin both the fire-once-per-selection and the re-fire contract.
-- **Provisional state resets on `Mop` change, not reference identity.** The
-  reset key is value-equality on `Position.Mop` (cube dice are always
-  `[0, 0]`, so they are not part of the key). Re-passing the same logical
-  position — even a freshly built `DiagramRequest` — preserves the
-  provisional selection; a different starting position clears it.
-- **No imperative `UndoLast` / `UndoAll`.** A cube decision has no sub-state
-  to roll back beyond the two provisional halves, which a consumer clears by
-  advancing to a new position. There is no play-entry-style undo surface.
+- **Strictly controlled — the selection does not stick by itself.** The
+  component renders selection from `Value` alone. A consumer that binds
+  `ValueChanged` but never writes the pair back into `Value` (or doesn't
+  use `@bind-Value`) sees the clicked pill snap back unselected on the next
+  render. This is deliberate: the consumer's own answer field is the single
+  source of truth; there is no internal copy to drift from it.
+- **Clearing between problems is the consumer's job.** There is no request
+  and no Mop-keyed reset here — set `Value` to null when advancing to the
+  next problem, or the previous answer stays selected. (With `@bind-Value`,
+  null the bound field.)
+- **`ValueChanged` is `[EditorRequired]`.** Without it the row is inert
+  (see strictly-controlled above), and an out-of-date attribute name on a
+  Razor consumer would otherwise splat silently (Razor does not error on
+  unrecognized component attributes). RZ2012 surfaces the missing binding;
+  build with warnings-as-errors to make that a hard gate. `@bind-Value`
+  satisfies it.
+- **Fires on every selection, and re-fires on switches — never with null.**
+  There is no one-shot lock: each radio selection fires with its pair (one
+  radio sets both halves atomically, so there is no half-selected state),
+  and every subsequent switch re-fires with the updated pair. Radios cannot
+  deselect, so the callback never carries null — only the consumer setting
+  `Value = null` clears the row. A consumer wanting one-shot semantics
+  advances to the next problem on the first callback. Tests pin both the
+  fire-once-per-selection and the re-fire contract.
+- **No play/cube routing guard.** The row takes no `DiagramRequest`, so it
+  cannot reject a misrouted decision the way the old bundled wrapper did —
+  the `Decision.IsCube` branch is entirely the consumer's responsibility
+  (`BackgammonPlayEntry` still throws on cube decisions from its side).
+- **The radio group `name` is internal and instance-unique.** Don't rely on
+  it (it changes per instance by design, so two rows on a page never
+  cross-link browser-native mutual exclusion); select by the
+  `bg-cube-actions` / `bg-cube-action` classes in tests and styling.
 
 ## BackgammonDiagram — pitfalls
 
@@ -544,7 +551,7 @@ Pitfalls.
   `!important`; a consumer that genuinely wants overflow instead of
   contain-fit should size the container, not fight the default.
 
-## Bounded-height contract — pitfalls (both entry wrappers)
+## Bounded-height contract — pitfalls (`BackgammonPlayEntry`)
 
 - **Bound with a definite height, never `max-height` alone.** A `max-height`
   on the wrapper (or any auto-height ancestor) does not engage the contract:
@@ -556,18 +563,13 @@ Pitfalls.
 - **Bound the wrapper; don't style inside the slot.** `bg-board-slot` is
   stable, public structure, but the supported consumer interaction is
   bounding the wrapper. Consumer CSS that sets `height`/`flex`/`display` on
-  `.bg-board-slot`, or re-flexes the chrome (`.bg-cube-actions` is
-  `flex: none` by producer contract), replaces the mechanism rather than
-  configuring it — the letterbox and the chrome's content-sizing are only
-  guaranteed with the producer's values in force.
+  `.bg-board-slot` replaces the mechanism rather than configuring it — the
+  letterbox is only guaranteed with the producer's values in force.
 - **Never `display: contents` on the wrapper.** The pre-contract consumer
   glue (dissolving `bg-play-entry` so a percentage `max-height` could reach
   `.bg-diagram`) now *breaks* the contract if reintroduced: it dissolves the
   flex column that gives the slot its definite post-flex height. Migrating
   consumers must delete that glue when adopting the contract.
-- **Don't reorder the slot and the chrome.** The slot is the wrapper's first
-  child and the chrome follows it; board-above-chrome comes from DOM order
-  (bUnit pins the structure).
 
 ## Subproject-internal next steps
 

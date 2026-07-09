@@ -213,12 +213,11 @@ public class BackgammonPlayEntryTests : BunitContext
     [Fact]
     public void BoardSlot_WrapsDiagram()
     {
-        // The bounded-height contract's structural half, uniform with
-        // BackgammonCubeEntry: the diagram sits inside .bg-board-slot (the
-        // shrinkable flex row), a direct child of the wrapper, so a
-        // consumer-bounded height letterboxes the board. The layout half
-        // lives in the scoped CSS and was validated empirically; bUnit pins
-        // the markup structure it needs.
+        // The bounded-height contract's structural half: the diagram sits
+        // inside .bg-board-slot (the shrinkable flex row), a direct child of
+        // the wrapper, so a consumer-bounded height letterboxes the board.
+        // The layout half lives in the scoped CSS and was validated
+        // empirically; bUnit pins the markup structure it needs.
         var cut = Render<BackgammonPlayEntry>(p => p
             .Add(c => c.Request, StandardRequest()));
 
