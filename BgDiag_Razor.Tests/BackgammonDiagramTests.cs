@@ -1,4 +1,5 @@
-﻿using Bunit;
+﻿using System.Globalization;
+using Bunit;
 using BgDiag_Razor.Components;
 using BackgammonDiagram_Lib;
 using BackgammonDiagram_Lib.Rendering;
@@ -341,5 +342,95 @@ public class BackgammonDiagramTests : BunitContext
         var xFlipped = rectsFlipped[0].GetAttribute("x");
 
         Assert.NotEqual(xDefault, xFlipped);
+    }
+
+    // -----------------------------------------------------------------------
+    //  Culture-invariant overlay markup (regression: comma-decimal locales)
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public void Overlay_MarkupIsCultureInvariant_UnderCommaDecimalLocale()
+    {
+        // Blazor formats interpolated values with the thread culture, and WASM
+        // adopts the browser locale. Under a comma-decimal culture (nb-NO), a
+        // bare `@r.Width` for e.g. 30.8 emits "30,8" — an invalid SVG attribute
+        // a browser parses as 0, so the bar (and the viewBox) silently break.
+        // The overlay must route every geometry number through the lib's
+        // culture-invariant formatter instead. Confirmed as a production bug by
+        // a Norway beta tester on an nb-NO browser.
+        RunUnderCulture("nb-NO", () =>
+        {
+            // Sanity: the hostile culture really does use a comma decimal, so a
+            // culture-clean overlay below is a genuine result, not a no-op.
+            Assert.Equal("30,8", 30.8.ToString("0.##"));
+
+            var options = new DiagramOptions();
+            var cut = Render<BackgammonDiagram>(parameters => parameters
+                .Add(p => p.Request, DefaultRequest)
+                .Add(p => p.Options, options));
+
+            // Guard against a vacuous pass: pin the assertion over the *real*
+            // overlay, not an empty selection. The expected count is derived
+            // from the same hit regions the overlay is built from — 24 points +
+            // bar, plus cube/tray/dice as this request produces them.
+            var regions = DiagramRenderer.GetHitRegions(DefaultRequest, options);
+            var expectedRects = regions.Points.Count + 1                        // bar
+                + (regions.Cube is null ? 0 : 1)
+                + (regions.OnRollTray is null ? 0 : 1)
+                + (regions.Dice is null ? 0 : 1);
+
+            var rects = cut.FindAll("rect[fill='transparent'][pointer-events='all']");
+            Assert.True(rects.Count >= 26,
+                $"Expected a rich overlay (>=26 rects: 24 points + bar + cube), found {rects.Count}.");
+            Assert.Equal(expectedRects, rects.Count);
+
+            foreach (var rect in rects)
+                foreach (var attr in new[] { "x", "y", "width", "height" })
+                    AssertInvariantNumber(rect.GetAttribute(attr), $"rect @{attr}");
+
+            // The overlay <svg> is the absolutely-positioned one (the diagram
+            // SVG the lib injects is a MarkupString sibling with no such style).
+            var overlaySvg = cut.Find("svg[style*='position: absolute']");
+            var viewBox = overlaySvg.GetAttribute("viewBox");
+            Assert.NotNull(viewBox);
+            var parts = viewBox!.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            Assert.Equal(4, parts.Length);
+            foreach (var part in parts)
+                AssertInvariantNumber(part, "viewBox component");
+        });
+    }
+
+    // Asserts a rendered attribute value is a culture-clean SVG number: no
+    // comma decimal separator, and parseable as an invariant-culture double.
+    private static void AssertInvariantNumber(string? value, string what)
+    {
+        Assert.NotNull(value);
+        Assert.DoesNotContain(",", value);
+        Assert.True(
+            double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out _),
+            $"{what} '{value}' does not parse as an invariant-culture double.");
+    }
+
+    // Runs the assertion under a hostile comma-decimal culture, restoring the
+    // prior cultures afterwards. CurrentCulture is what interpolation actually
+    // reads on the executing thread; DefaultThreadCurrentCulture is set too so
+    // any thread spawned inside the action inherits the hostile culture. Mirrors
+    // the pattern established in BackgammonDiagram_Lib's SvgFormatTests.
+    private static void RunUnderCulture(string cultureName, Action assertion)
+    {
+        var culture = CultureInfo.GetCultureInfo(cultureName);
+        var priorCurrent = CultureInfo.CurrentCulture;
+        var priorDefault = CultureInfo.DefaultThreadCurrentCulture;
+        try
+        {
+            CultureInfo.CurrentCulture = culture;
+            CultureInfo.DefaultThreadCurrentCulture = culture;
+            assertion();
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = priorCurrent;
+            CultureInfo.DefaultThreadCurrentCulture = priorDefault;
+        }
     }
 }

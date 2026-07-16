@@ -499,6 +499,19 @@ and surrounding spacing.
 
 ## BackgammonDiagram — pitfalls
 
+- **Never interpolate numeric values directly into Razor markup attributes.**
+  Blazor formats interpolated values with the *thread* culture, and WASM adopts
+  the browser locale — so `x="@r.Width"` for `30.8` emits `"30,8"` on an
+  nb-NO browser, an invalid SVG attribute a browser parses as `0` (the bar and
+  the `viewBox` silently break; confirmed in production by a Norway beta
+  tester). Route every geometry number through the lib's culture-invariant
+  formatter: `SvgFormat.Number(value)` for a scalar attribute,
+  `SvgViewBox.ToAttributeString()` for the `viewBox`. This applies to any
+  numeric SVG attribute the overlay (or a future consumer fragment) writes, not
+  just the ones present today. CSS numbers are a separate case — `_rootStyle`
+  uses `FormattableString.Invariant` because `aspect-ratio` is CSS, not an SVG
+  attribute, and `SvgFormat.Number`'s `"0.##"` rounding would truncate the
+  ratio's precision.
 - **Overlay viewBox must match the lib's SVG.** The overlay is sized from
   `BoardHitRegions.ViewBox` so hit rects align with the rendered diagram. If
   the lib's viewBox ever diverges from what `GetHitRegions` reports, clicks

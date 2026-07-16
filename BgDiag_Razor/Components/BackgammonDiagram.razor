@@ -7,37 +7,37 @@
         @if (_hitRegions is not null)
         {
             <svg xmlns="http://www.w3.org/2000/svg"
-                 viewBox="@($"{_hitRegions.ViewBox.X} {_hitRegions.ViewBox.Y} {_hitRegions.ViewBox.Width} {_hitRegions.ViewBox.Height}")"
+                 viewBox="@_hitRegions.ViewBox.ToAttributeString()"
                  style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;">
                 @foreach (var kvp in _hitRegions.Points)
                 {
                     var pt = kvp.Key;
                     var r = kvp.Value;
-                    <rect x="@r.X" y="@r.Y" width="@r.Width" height="@r.Height"
+                    <rect x="@SvgFormat.Number(r.X)" y="@SvgFormat.Number(r.Y)" width="@SvgFormat.Number(r.Width)" height="@SvgFormat.Number(r.Height)"
                           fill="transparent" pointer-events="all"
                           @onclick="() => OnPointClicked.InvokeAsync(pt)" />
                 }
                 @{
                     var bar = _hitRegions.Bar;
                 }
-                <rect x="@bar.X" y="@bar.Y" width="@bar.Width" height="@bar.Height"
+                <rect x="@SvgFormat.Number(bar.X)" y="@SvgFormat.Number(bar.Y)" width="@SvgFormat.Number(bar.Width)" height="@SvgFormat.Number(bar.Height)"
                       fill="transparent" pointer-events="all"
                       @onclick="() => OnBarClicked.InvokeAsync(25)" />
                 @if (_hitRegions.Cube is { } cube)
                 {
-                    <rect x="@cube.X" y="@cube.Y" width="@cube.Width" height="@cube.Height"
+                    <rect x="@SvgFormat.Number(cube.X)" y="@SvgFormat.Number(cube.Y)" width="@SvgFormat.Number(cube.Width)" height="@SvgFormat.Number(cube.Height)"
                           fill="transparent" pointer-events="all"
                           @onclick="OnCubeClicked" />
                 }
                 @if (_hitRegions.OnRollTray is { } tray)
                 {
-                    <rect x="@tray.X" y="@tray.Y" width="@tray.Width" height="@tray.Height"
+                    <rect x="@SvgFormat.Number(tray.X)" y="@SvgFormat.Number(tray.Y)" width="@SvgFormat.Number(tray.Width)" height="@SvgFormat.Number(tray.Height)"
                           fill="transparent" pointer-events="all"
                           @onclick="OnTrayClicked" />
                 }
                 @if (_hitRegions.Dice is { } dice)
                 {
-                    <rect x="@dice.X" y="@dice.Y" width="@dice.Width" height="@dice.Height"
+                    <rect x="@SvgFormat.Number(dice.X)" y="@SvgFormat.Number(dice.Y)" width="@SvgFormat.Number(dice.Width)" height="@SvgFormat.Number(dice.Height)"
                           fill="transparent" pointer-events="all"
                           @onclick="OnDiceClicked" />
                 }
