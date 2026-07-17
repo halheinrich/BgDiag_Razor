@@ -101,7 +101,7 @@ public class BackgammonPlayEntryTests : BunitContext
     // -----------------------------------------------------------------------
     //  Click helpers — translate a click target (point / bar) to the matching
     //  transparent overlay rect rendered by the inner diagram. Emission order is
-    //  the Points dict (1..24), then bar, then optional cube/tray, then dice.
+    //  the Points dict (1..24), then bar, then optional tray, then dice.
     //  Rects are re-found per click so post-render handler IDs stay fresh.
     // -----------------------------------------------------------------------
 
@@ -124,13 +124,13 @@ public class BackgammonPlayEntryTests : BunitContext
         return regions.Points.Count;
     }
 
-    /// <summary>The on-roll tray rect follows the points, bar, and optional cube.</summary>
+    /// <summary>The on-roll tray rect follows the points and bar.</summary>
     private static int RectIndexForTray(DiagramRequest req)
     {
         var regions = DiagramRenderer.GetHitRegions(req, new DiagramOptions());
         if (regions.OnRollTray is null)
             throw new InvalidOperationException("Request has no OnRollTray region.");
-        return regions.Points.Count + 1 + (regions.Cube is null ? 0 : 1);
+        return regions.Points.Count + 1;
     }
 
     private static Task ClickRectAsync(

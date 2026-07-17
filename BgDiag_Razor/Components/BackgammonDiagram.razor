@@ -23,12 +23,6 @@
                 <rect x="@SvgFormat.Number(bar.X)" y="@SvgFormat.Number(bar.Y)" width="@SvgFormat.Number(bar.Width)" height="@SvgFormat.Number(bar.Height)"
                       fill="transparent" pointer-events="all"
                       @onclick="() => OnBarClicked.InvokeAsync(25)" />
-                @if (_hitRegions.Cube is { } cube)
-                {
-                    <rect x="@SvgFormat.Number(cube.X)" y="@SvgFormat.Number(cube.Y)" width="@SvgFormat.Number(cube.Width)" height="@SvgFormat.Number(cube.Height)"
-                          fill="transparent" pointer-events="all"
-                          @onclick="OnCubeClicked" />
-                }
                 @if (_hitRegions.OnRollTray is { } tray)
                 {
                     <rect x="@SvgFormat.Number(tray.X)" y="@SvgFormat.Number(tray.Y)" width="@SvgFormat.Number(tray.Width)" height="@SvgFormat.Number(tray.Height)"

@@ -152,7 +152,6 @@ the matching `EventCallback`:
 - `Points` dictionary → one `<rect>` per point, invokes `OnPointClicked` with
   the point index (1–24).
 - `Bar` → invokes `OnBarClicked(25)`.
-- `Cube` (nullable) → invokes `OnCubeClicked`.
 - `OnRollTray` (the on-roll player's bearing-off tray, nullable) → invokes
   `OnTrayClicked`.
 
@@ -361,7 +360,6 @@ All three components live in namespace `BgDiag_Razor.Components`.
 
 - `EventCallback<int> OnPointClicked` — fired with point index 1–24.
 - `EventCallback<int> OnBarClicked` — fired with 25.
-- `EventCallback OnCubeClicked` — fired when the cube region is clicked.
 - `EventCallback OnTrayClicked` — fired when the on-roll player's bearing-off
   tray is clicked.
 - `EventCallback OnDiceClicked` — fired when the dice region is clicked
@@ -458,9 +456,6 @@ and surrounding spacing.
   enter the answer with `BackgammonCubeActions`; there is no cube-side
   guard to catch a misroute (the row is request-free), so the `IsCube`
   branch lives with the consumer.
-- **The inner diagram's cube hit region still renders** (because
-  `BackgammonDiagram` always wires it) but `BackgammonPlayEntry` does not
-  subscribe; cube-area clicks during play entry are no-ops by design.
 
 ## BackgammonCubeActions — pitfalls
 

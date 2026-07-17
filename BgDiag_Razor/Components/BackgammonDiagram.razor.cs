@@ -49,10 +49,6 @@ public partial class BackgammonDiagram : ComponentBase
     [Parameter]
     public EventCallback<int> OnBarClicked { get; set; }
 
-    /// <summary>Fired when the cube area is clicked.</summary>
-    [Parameter]
-    public EventCallback OnCubeClicked { get; set; }
-
     /// <summary>Fired when the on-roll player's bearing-off tray is clicked.</summary>
     [Parameter]
     public EventCallback OnTrayClicked { get; set; }

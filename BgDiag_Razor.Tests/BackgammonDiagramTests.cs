@@ -50,7 +50,6 @@ public class BackgammonDiagramTests : BunitContext
             .Add(p => p.Request, DefaultRequest)
             .Add(p => p.OnPointClicked, (int _) => { })
             .Add(p => p.OnBarClicked, (int _) => { })
-            .Add(p => p.OnCubeClicked, () => { })
             .Add(p => p.OnTrayClicked, () => { }));
 
         Assert.NotNull(cut);
@@ -79,7 +78,8 @@ public class BackgammonDiagramTests : BunitContext
             .Add(p => p.Request, DefaultRequest)
             .Add(p => p.Options, new DiagramOptions()));
 
-        // 24 point rects + 1 bar rect + cube rect = 26 transparent rects
+        // 24 point rects + 1 bar rect = 25 transparent rects (plus tray/dice as
+        // the request produces them).
         var rects = cut.FindAll("rect[fill='transparent']");
         Assert.True(rects.Count >= 25,
             $"Expected at least 25 transparent rects (24 points + bar), found {rects.Count}");
@@ -143,23 +143,6 @@ public class BackgammonDiagramTests : BunitContext
         // Index 24 is the bar rect
         await rects[24].ClickAsync(new Microsoft.AspNetCore.Components.Web.MouseEventArgs());
         Assert.Equal(25, barValue);
-    }
-
-    [Fact]
-    public async Task ClickCubeRect_InvokesOnCubeClicked()
-    {
-        bool cubeFired = false;
-        var cut = Render<BackgammonDiagram>(parameters => parameters
-            .Add(p => p.Request, DefaultRequest)
-            .Add(p => p.Options, new DiagramOptions())
-            .Add(p => p.OnCubeClicked, () => { cubeFired = true; }));
-
-        var rects = cut.FindAll("rect[fill='transparent'][pointer-events='all']");
-        // Cube rect follows bar (index 25) when present
-        Assert.True(rects.Count >= 26, $"Expected at least 26 rects (24 pts + bar + cube), found {rects.Count}");
-
-        await rects[25].ClickAsync(new Microsoft.AspNetCore.Components.Web.MouseEventArgs());
-        Assert.True(cubeFired);
     }
 
     [Fact]
@@ -372,16 +355,15 @@ public class BackgammonDiagramTests : BunitContext
             // Guard against a vacuous pass: pin the assertion over the *real*
             // overlay, not an empty selection. The expected count is derived
             // from the same hit regions the overlay is built from — 24 points +
-            // bar, plus cube/tray/dice as this request produces them.
+            // bar, plus tray/dice as this request produces them.
             var regions = DiagramRenderer.GetHitRegions(DefaultRequest, options);
             var expectedRects = regions.Points.Count + 1                        // bar
-                + (regions.Cube is null ? 0 : 1)
                 + (regions.OnRollTray is null ? 0 : 1)
                 + (regions.Dice is null ? 0 : 1);
 
             var rects = cut.FindAll("rect[fill='transparent'][pointer-events='all']");
             Assert.True(rects.Count >= 26,
-                $"Expected a rich overlay (>=26 rects: 24 points + bar + cube), found {rects.Count}.");
+                $"Expected a rich overlay (>=26 rects: 24 points + bar + tray + dice), found {rects.Count}.");
             Assert.Equal(expectedRects, rects.Count);
 
             foreach (var rect in rects)
