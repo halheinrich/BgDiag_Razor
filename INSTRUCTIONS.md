@@ -48,6 +48,7 @@ Source-only — excludes `.gitignore`, `.github/`, and build artifacts.
 
 ```
 BgDiag_Razor.slnx
+Directory.Build.props
 Directory.Packages.props
 BgDiag_Razor/
   BgDiag_Razor.csproj

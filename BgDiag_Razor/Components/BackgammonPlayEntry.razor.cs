@@ -162,6 +162,13 @@ public partial class BackgammonPlayEntry : ComponentBase
     //  Lifecycle
     // -----------------------------------------------------------------------
 
+    /// <summary>
+    /// Single render/reset hook. Clears all cached state on a null
+    /// <see cref="Request"/>, rejects cube decisions at the contract boundary
+    /// (see the class summary), and otherwise resets or preserves the
+    /// <see cref="MoveEntryState"/> by value-equality on the incoming
+    /// <c>(Mop, Dice)</c> pair before rebuilding the rendered request.
+    /// </summary>
     protected override void OnParametersSet()
     {
         if (Request is null)

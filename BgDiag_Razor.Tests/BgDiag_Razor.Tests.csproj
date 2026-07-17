@@ -1,10 +1,13 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
+    <!-- A test assembly ships no public API to document, so opt out of the
+         repo-wide GenerateDocumentationFile default (Directory.Build.props);
+         with docs on, CS1591 would demand XML comments on every public test
+         fixture. TreatWarningsAsErrors stays inherited — warnings are errors
+         here too. -->
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
   </PropertyGroup>
 
   <ItemGroup>
