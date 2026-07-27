@@ -591,6 +591,14 @@ and surrounding spacing.
   can advance from now) in a one-line plumbing change. Unlocks legal-hint
   hover and any future point-highlighting consumer in a single small addition. Index→rect mapping stays inside
   `BackgammonDiagram` where the rest of it lives — no consumer-side leak.
+  History: the original `BackgammonPlayEntry` design carried a
+  `ShowLegalHints` parameter rendering a translucent highlight over each point
+  in `state.LegalNextClicks`; the implementing session minimized the public
+  surface and dropped it. Easy to re-add when consumer demand surfaces — the
+  parameter, an overlay layer in the markup, and tests for the
+  hint-visibility toggle. When it lands, also extend `LegalNextClicks` to
+  surface makeable *destinations*, not only sources (an E2 one-click-entry
+  note — the state exposes source points only today).
 - **Migrate off `MarkupString` injection.** Once `BackgammonDiagram_Lib`
   exposes a rendering API that emits structured elements rather than a
   single SVG string, replace the `(MarkupString)` injection with a native
@@ -600,3 +608,9 @@ and surrounding spacing.
   the click overlay can become additional `<rect>` elements inside the same
   `<svg>` rather than a parallel absolutely-positioned sibling, eliminating
   the pointer-events / stacking plumbing.
+- **Verify component layout under the new 16:9 aspect default.** Adapt, or
+  pass `AspectPreset.Natural`, if needed.
+- **Two one-liners at the next touch.** `BackgammonPlayEntry`'s cube guard
+  throws `NotImplementedException` where `NotSupportedException` is the
+  semantically correct type; `PlayEntry.OnPlayCompleted` still lacks
+  `[EditorRequired]`.
