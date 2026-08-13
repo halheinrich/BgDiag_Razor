@@ -348,12 +348,6 @@ All three components live in namespace `BgDiag_Razor.Components`.
 - `DiagramRequest? Request` — the position and match state to render. Null
   renders nothing.
 - `DiagramOptions Options` — rendering options (defaults to `new()`).
-- `RenderFragment? Overlay` — consumer content rendered last inside
-  `.bg-diagram` (the self-sizing board box), above the hit-region overlay.
-  The wrapper is `pointer-events: none`; a consumer opts individual overlay
-  elements back in with their own `pointer-events: auto`. Domain-agnostic —
-  the component owns only the positioning container. Null (default) is a
-  complete no-op: no wrapper markup renders at all.
 - `Dictionary<string, object>? AdditionalAttributes` — splatted onto the
   outer wrapper `div`.
 
@@ -380,9 +374,6 @@ pitfalls.
   renders nothing. Cube decisions (`Decision.IsCube == true`) throw
   `NotImplementedException`.
 - `DiagramOptions Options` — forwarded to the inner diagram.
-- `RenderFragment? Overlay` — forwarded, unchanged, to the inner diagram's
-  own `Overlay` (see `BackgammonDiagram` above). This component adds no
-  wrapper of its own around it.
 - `Dictionary<string, object>? AdditionalAttributes` — splatted onto the
   outer wrapper `div`.
 
@@ -426,7 +417,7 @@ flow. See "Bounded-height contract" in Architecture and its Pitfalls.
 - `Dictionary<string, object>? AdditionalAttributes` — splatted onto the
   root `div` (`bg-cube-actions`).
 
-No `Request`, no `Options`, no `Overlay` — the row is board-free. Cube
+No `Request` and no `Options` — the row is board-free. Cube
 consumers render the position separately with `BackgammonDiagram` (which
 letterboxes by itself via its contain-fit default) and place this row in
 their own chrome.
@@ -503,8 +494,7 @@ and surrounding spacing.
   tester). Route every geometry number through the lib's culture-invariant
   formatter: `SvgFormat.Number(value)` for a scalar attribute,
   `SvgViewBox.ToAttributeString()` for the `viewBox`. This applies to any
-  numeric SVG attribute the overlay (or a future consumer fragment) writes, not
-  just the ones present today. CSS numbers are a separate case — `_rootStyle`
+  numeric SVG attribute the overlay writes, not just the ones present today. CSS numbers are a separate case — `_rootStyle`
   uses `FormattableString.Invariant` because `aspect-ratio` is CSS, not an SVG
   attribute, and `SvgFormat.Number`'s `"0.##"` rounding would truncate the
   ratio's precision.
