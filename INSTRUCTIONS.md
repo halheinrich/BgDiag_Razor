@@ -237,6 +237,19 @@ when the doubler doubles. Each option is a `<label class="bg-cube-action">`
 wrapping its own `<input type="radio">`; the selected option additionally
 carries `bg-cube-action-selected` for a visible selected state.
 
+The radio itself is **visually hidden but not removed** — the pill's own
+border, fill and weight are the selected affordance, so the native dot stops
+being painted. The technique is the transparent native control stretched
+over its own pill (`position: absolute; inset: 0; opacity: 0`), not the
+sr-only clip recipe. The `input` stays rendered, focusable, and in the
+accessibility tree, keeping native radio-group behavior (arrow-key roving,
+mutual exclusion by name) and the control's accessible name; it also stays
+the element at its own coordinates, so the pill's whole area is the input's
+hit target. The keyboard focus ring moves from the dot to the pill
+(`:focus-visible`, on `outline` so it cannot widen the row). The markup and
+the option semantics are unchanged by this — what changed is what gets
+painted.
+
 The four `(label, pair)` mappings are one private static table in the
 code-behind. Single-sourced for now; if a second consumer ever needs the
 same labels, lift to a shared helper at that point.
@@ -256,6 +269,20 @@ falls out of its own padding + line-height (roughly a standard button's
 height, without encoding any consumer's button metrics). The consumer
 places the row (e.g. inline beside its own buttons) and owns the spacing
 around it.
+
+The **horizontal** metrics are a measured contract, not free styling. This
+row is the widest element of the consuming quiz page's action row, and at
+its original metrics (0.75rem row gap, 0.9rem pill inline padding, visible
+radio dot) the four pills totalled 561.6px — they out-widened the board and
+wrapped through the 641–1366px band, adding a line of chrome that cost
+board pixels wherever the board is height-bound. The compacted form
+(0.25rem gap, 0.45rem inline padding, hidden dot) takes them to 396.0px,
+measured. It is unconditional — no media query gates it, because a producer
+has no view of the consumer's layout to gate one on. Vertical metrics were
+deliberately left alone: 0.5rem block padding + 1.2 line-height is the
+pill's 37px height, which is the tap-target floor. Ruled in the umbrella's
+`SPEC-quiz-view.md` §2 (invariance floor), issue
+`halheinrich/backgammon#99`.
 
 ### BackgammonCubeActions — controlled value contract
 
@@ -335,7 +362,18 @@ no-stick without a value writeback, each radio fires `ValueChanged` exactly
 once with its matching `CubeDecisionPair` (parameterized), switching radios
 re-fires with the new pair, the controlled writeback round trip (the
 `@bind-Value` wiring), and instance-unique radio group names across two
-rendered rows.
+rendered rows. Five more cover the compacted pills. One is markup: the
+radios stay real focusable controls (no `hidden` / `aria-hidden` /
+`disabled` / `tabindex`). The other four read the scoped stylesheet as
+text, since bUnit has no CSS engine — the radio is hidden by the
+transparent-overlay technique rather than by `display: none`, a zeroed
+size, or `clip` (each asserted against); the pill keeps a
+`:focus-visible` outline; the three compaction constants and the
+tap-target line-height hold, with no media query; and the selected pill
+keeps all three of its signals (border hue, fill, weight). The
+text-pinning technique is BgQuiz's (`MainLayoutTests`' narrow-desktop
+band); comments are stripped before matching, so prose naming a
+declaration cannot satisfy an assertion about it.
 
 ## Public API
 
@@ -483,6 +521,32 @@ and surrounding spacing.
   it (it changes per instance by design, so two rows on a page never
   cross-link browser-native mutual exclusion); select by the
   `bg-cube-actions` / `bg-cube-action` classes in tests and styling.
+- **Never hide the radio with `display: none`, `visibility: hidden`, a
+  `hidden` attribute, or a zeroed size.** The dot is hidden by making the
+  native control *transparent and stretched over its own pill*, precisely so
+  it stays focusable, in the accessibility tree, and hit-testable. Every
+  blunt alternative takes it out of the tab order and out of AT's reach,
+  killing native arrow-key roving and the row's accessible names — and the
+  page looks identical either way, so this regresses silently.
+- **Don't "tidy" the hidden radio into the sr-only `clip-path` recipe.** It
+  looks like the more idiomatic way to hide a control and it keeps the
+  accessibility tree correct, so it is the plausible wrong turn here — but
+  `clip-path` clips *hit-testing* as well as painting. Clipped to a 1px box,
+  the input stops being the element at its own centre (`elementFromPoint`
+  returns the label), and anything driving the real control by pointer
+  breaks: measured, it makes Playwright's `CheckAsync` fail its
+  actionability check, which is how the BgQuiz e2e suite answers cube
+  problems. The pill's `:focus-visible` outline is the other half of the
+  affordance: without it a keyboard user has no visible cursor at all. All
+  of this is pinned by tests that read the scoped stylesheet as text (bUnit
+  has no CSS engine).
+- **The row's horizontal metrics are load-bearing at the consumer.** Row
+  gap, pill inline padding, and the hidden dot were compacted against
+  measurement to stop this row out-widening the board and wrapping (see
+  Sizing posture above). Re-widening any of them reopens the wrap; take a
+  fresh measurement first, and don't "restore" the dot for symmetry with
+  some other control. Conversely, don't shave the *block* padding to save
+  more width — that trades a layout win for a tap-target regression.
 
 ## BackgammonDiagram — pitfalls
 

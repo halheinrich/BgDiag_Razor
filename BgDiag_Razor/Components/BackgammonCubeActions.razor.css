@@ -1,27 +1,42 @@
 /* Cube-decision radio pills. Scoped to BackgammonCubeActions — styles the four
    mutually-exclusive options rendered by the .razor. Each option is a <label>
-   wrapping its own <input type="radio"> + caption, so the radio and its text
-   read as one clickable unit and the row spaces the four apart.
+   wrapping its own <input type="radio"> + caption; the input is visually
+   hidden (see below), so the pill itself is the whole visible affordance and
+   the row spaces the four apart.
 
    Sizing posture: compact and inline-flow-friendly by intent. The root is an
    inline-flex row that takes only its content size and carries no external
    margins; each pill's height falls out of its own padding + line-height —
    roughly a standard button's height, without encoding any consumer's button
    metrics. The consumer places the row (e.g. inline beside its own buttons)
-   and owns the spacing around it. */
+   and owns the spacing around it.
+
+   The horizontal metrics below (row gap, pill inline padding, and the hidden
+   radio) are load-bearing at the consumer, not free styling: this row is the
+   widest element of the consuming quiz page's action row, and at its former
+   metrics it out-widened the board and wrapped through the 641–1366px band, adding
+   a chrome line that cost board pixels wherever the board is height-bound.
+   Compacting them (measured: -165.6px across the four pills) is the ruled
+   resolution — umbrella SPEC-quiz-view.md §2's invariance floor,
+   halheinrich/backgammon#99. The compact form is unconditional: there is no
+   media query here, because a producer component has no view of the
+   consumer's layout to gate one on. Re-widening any of the three reopens the
+   wrap; take a fresh measurement first. */
 
 .bg-cube-actions {
     display: inline-flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 0.75rem;
+    gap: 0.25rem;
 }
 
 .bg-cube-action {
+    /* Containing block for the visually-hidden radio, so it stays inside its
+       own pill rather than resolving against some ancestor of the consumer's. */
+    position: relative;
     display: inline-flex;
     align-items: center;
-    gap: 0.5rem;                 /* clear space between a radio and its caption */
-    padding: 0.5rem 0.9rem;
+    padding: 0.5rem 0.45rem;
     border: 1px solid #cbd2d9;
     border-radius: 0.5rem;
     background: #fff;
@@ -36,13 +51,55 @@
     background: #f4f6f8;
 }
 
+/* The native radio dot is redundant with the pill — the pill's own border,
+   fill and weight already say "selected" — so it stops being painted. It is
+   *hidden, not dropped*: the input stays in the accessibility tree, stays
+   focusable, and keeps the browser's native radio-group semantics (arrow-key
+   roving, mutual exclusion by name). Never `display: none` /
+   `visibility: hidden` / a `hidden` attribute, each of which would take the
+   control out of the tab order and the a11y tree with it.
+
+   The technique is the transparent native control stretched over its own
+   pill, not the sr-only clip recipe. Both hide the dot and both keep the
+   control accessible, but `clip-path` clips *hit-testing* as well as
+   painting: clipped to a 1px box, the input stops being the element at its
+   own coordinates (`elementFromPoint` there returns the label), so anything
+   that drives the real control by pointer — the consumer's Playwright
+   `CheckAsync`, most obviously — finds it unable to receive pointer events.
+   Stretching it instead makes the whole pill the input's own hit area, which
+   is what a pill-shaped radio should have been all along. It costs the row
+   nothing: absolutely positioned, it is out of flow and contributes no width.
+   `box-sizing` is set here rather than inherited so the rule does not depend
+   on a consumer shipping a global reset. Vertical metrics are untouched by
+   all of this — the caption's line box, not the dot, sets the pill's height,
+   so the tap target keeps its measured size. */
 .bg-cube-action input[type="radio"] {
+    position: absolute;
+    inset: 0;
+    box-sizing: border-box;
+    width: 100%;
+    height: 100%;
     margin: 0;
+    opacity: 0;
     cursor: pointer;
 }
 
+/* Keyboard focus, re-homed. The focus ring the browser used to draw around the
+   dot is clipped away with it, so the pill takes over the job — otherwise a
+   keyboard user arrowing through the group would have no visible cursor. It
+   rides `outline`, which draws outside the border box and so cannot change the
+   row's width; `:has()` is what lets the label style itself from its own
+   input's state. `:focus-visible` (not `:focus`) keeps the ring off a plain
+   mouse click, matching the platform's own heuristic. */
+.bg-cube-action:has(input[type="radio"]:focus-visible) {
+    outline: 2px solid #2f6fed;
+    outline-offset: 2px;
+}
+
 /* Doubled class so the selected state outranks :hover (equal specificity, but
-   this rule comes later) — a selected pill stays highlighted while hovered. */
+   this rule comes later) — a selected pill stays highlighted while hovered.
+   With the dot gone these three co-varying signals — border hue, fill, and
+   weight — are the whole selected affordance; don't thin them to one. */
 .bg-cube-action.bg-cube-action-selected,
 .bg-cube-action.bg-cube-action-selected:hover {
     border-color: #2f6fed;

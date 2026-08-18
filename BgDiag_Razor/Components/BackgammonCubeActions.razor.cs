@@ -68,6 +68,41 @@ namespace BgDiag_Razor.Components;
 /// </para>
 ///
 /// <para>
+/// The row's <i>horizontal</i> metrics are a measured contract rather than free
+/// styling. This row is the widest element of the consuming quiz page's action
+/// row, and at its original metrics it out-widened the board and wrapped through
+/// the 641–1366px band, adding a line of chrome that cost board pixels wherever
+/// the board is height-bound. The compacted form — tight row gap, tight pill
+/// inline padding, and a visually hidden radio dot (see below) — is the ruled
+/// resolution, and it is unconditional: no media query gates it, because a
+/// producer component has no view of the consumer's layout to gate one on.
+/// Re-widening any of the three reopens the wrap, so take a fresh measurement
+/// first. See the umbrella's <c>SPEC-quiz-view.md</c> §2 invariance floor and
+/// issue <c>halheinrich/backgammon#99</c>.
+/// </para>
+///
+/// <para>
+/// <b>The radio dot is hidden, not dropped.</b> The pill's own border, fill and
+/// weight carry the selected state, so the native dot is redundant and stops
+/// being painted: the <c>input</c> is stretched transparently over its own pill
+/// rather than removed. It stays rendered, focusable, and in the accessibility
+/// tree, keeping the browser's native radio-group behavior (arrow-key roving,
+/// mutual exclusion by name) and the control's accessible name; the visible
+/// keyboard focus ring moves from the dot to the pill, and the pill's whole area
+/// becomes the input's own hit target. Consumers therefore still get a real
+/// radio group — what changed is what gets painted, not the semantics — and can
+/// still drive it by pointer, keyboard, or an automation harness.
+///
+/// <para>
+/// Restyling the input away with <c>display: none</c>, <c>visibility: hidden</c>
+/// or a zeroed size would take it out of the tab order and the accessibility
+/// tree. So would the sr-only <c>clip-path</c> recipe, less visibly: that clips
+/// hit-testing as well as painting, leaving the control unreachable by pointer
+/// even though it still reads correctly to a screen reader.
+/// </para>
+/// </para>
+///
+/// <para>
 /// <b>Instance-unique radio group.</b> Each instance generates its own
 /// <c>name</c> for its four radios, so two rows on one page never cross-link
 /// their browser-native mutual exclusion. The name is internal — consumers
