@@ -1,5 +1,7 @@
 <Solution>
   <Project Path="../BackgammonDiagram_Lib/BackgammonDiagram_Lib/BackgammonDiagram_Lib.csproj" />
+  <Project Path="../BgDataTypes_Lib/BgDataTypes_Lib/BgDataTypes_Lib.csproj" />
+  <Project Path="../BgMoveGen/BgMoveGen/BgMoveGen.csproj" />
   <Project Path="BgDiag_Razor.Tests/BgDiag_Razor.Tests.csproj" />
   <Project Path="BgDiag_Razor/BgDiag_Razor.csproj" />
 </Solution>
