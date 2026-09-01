@@ -163,6 +163,87 @@ public class BackgammonDiagramTests : BunitContext
     }
 
     // -----------------------------------------------------------------------
+    //  data-point — the point rects' addressable identity
+    //  (halheinrich/backgammon#13).
+    //
+    //  Out-of-process drivers cannot bind an EventCallback, so before this
+    //  attribute a browser harness's only handle on a point was the overlay's
+    //  render order (rect index = point - 1) — a contract documented at the
+    //  consumer and never stated by the producer. These pin the producer's
+    //  side of it: the attribute exists, it is exactly the point set, and it
+    //  agrees with the callback.
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public void PointRects_CarryTheirPointNumberAsDataPoint()
+    {
+        var cut = Render<BackgammonDiagram>(parameters => parameters
+            .Add(p => p.Request, DefaultRequest)
+            .Add(p => p.Options, new DiagramOptions()));
+
+        var pointRects = cut.FindAll("rect[data-point]");
+
+        Assert.Equal(
+            Enumerable.Range(1, 24).Select(n => n.ToString()),
+            pointRects.Select(r => r.GetAttribute("data-point")));
+    }
+
+    [Fact]
+    public void OnlyPointRects_CarryDataPoint()
+    {
+        var cut = Render<BackgammonDiagram>(parameters => parameters
+            .Add(p => p.Request, DefaultRequest)
+            .Add(p => p.Options, new DiagramOptions()));
+
+        // The overlay carries more than the 24 points (bar, tray, dice), and
+        // none of those answer to the attribute — that is what makes
+        // `rect[data-point]` a selector for the point set rather than a
+        // prefix of the rect list.
+        var allRects = cut.FindAll("rect[fill='transparent'][pointer-events='all']");
+        Assert.True(allRects.Count > 24,
+            $"Expected point rects plus bar/tray/dice, found {allRects.Count}.");
+        Assert.Equal(24, cut.FindAll("rect[data-point]").Count);
+        Assert.Empty(cut.FindAll("rect[data-point='25']"));
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(7)]
+    [InlineData(24)]
+    public async Task ClickingTheRectWithDataPoint_InvokesOnPointClicked_WithThatPoint(int point)
+    {
+        int clickedPoint = -1;
+        var cut = Render<BackgammonDiagram>(parameters => parameters
+            .Add(p => p.Request, DefaultRequest)
+            .Add(p => p.Options, new DiagramOptions())
+            .Add(p => p.OnPointClicked, (int pt) => { clickedPoint = pt; }));
+
+        await cut.Find($"rect[data-point='{point}']")
+            .ClickAsync(new Microsoft.AspNetCore.Components.Web.MouseEventArgs());
+
+        Assert.Equal(point, clickedPoint);
+    }
+
+    /// <summary>
+    /// The render-order reading the attribute supersedes still holds — this is
+    /// an addition, not a migration, and the positional handle a consumer may
+    /// still be using must not have moved underneath it.
+    /// </summary>
+    [Fact]
+    public void DataPoint_AgreesWithTheOverlayRenderOrder()
+    {
+        var cut = Render<BackgammonDiagram>(parameters => parameters
+            .Add(p => p.Request, DefaultRequest)
+            .Add(p => p.Options, new DiagramOptions()));
+
+        var allRects = cut.FindAll("rect[fill='transparent'][pointer-events='all']");
+
+        Assert.Equal(
+            Enumerable.Range(1, 24).Select(n => n.ToString()),
+            allRects.Take(24).Select(r => r.GetAttribute("data-point")));
+    }
+
+    // -----------------------------------------------------------------------
     //  Self-sizing: root carries an aspect-ratio derived from the viewBox
     // -----------------------------------------------------------------------
 

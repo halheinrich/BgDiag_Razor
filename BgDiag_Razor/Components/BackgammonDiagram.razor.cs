@@ -33,6 +33,21 @@ namespace BgDiag_Razor.Components;
 /// </para>
 ///
 /// <para>
+/// <b>Point rects are addressable.</b> Each point's rect carries
+/// <c>data-point="N"</c> (N = 1–24, the same index the callback reports); no
+/// other region's rect carries the attribute, so <c>rect[data-point]</c> is
+/// exactly the point set and <c>rect[data-point="7"]</c> is point 7. This
+/// exists for out-of-process drivers — a browser automation harness cannot
+/// bind an <c>EventCallback</c>, and before this attribute its only handle was
+/// the overlay's render order (rect index = point − 1), a positional contract
+/// that was documented at the consumer but never stated by the producer
+/// (<c>halheinrich/backgammon#13</c>). Render order is unchanged, so the
+/// positional reading still holds; it is simply no longer the only one. It is
+/// deliberately a plain <c>data-</c> attribute rather than an <c>id</c>: it
+/// repeats across two diagrams on one page without minting duplicate ids.
+/// </para>
+///
+/// <para>
 /// <b>Stateful and cube-decision consumers.</b> A consumer that needs
 /// click-by-click move entry composes this via <see cref="BackgammonPlayEntry"/>;
 /// a cube decision is answered with the free-standing

@@ -14,6 +14,7 @@
                     var pt = kvp.Key;
                     var r = kvp.Value;
                     <rect x="@SvgFormat.Number(r.X)" y="@SvgFormat.Number(r.Y)" width="@SvgFormat.Number(r.Width)" height="@SvgFormat.Number(r.Height)"
+                          data-point="@pt"
                           fill="transparent" pointer-events="all"
                           @onclick="() => OnPointClicked.InvokeAsync(pt)" />
                 }

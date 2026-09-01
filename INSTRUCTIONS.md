@@ -161,6 +161,19 @@ the matching `EventCallback`:
 The overlay is the second child of the outer wrapper so it sits above the
 pointer-events-disabled diagram in stacking order.
 
+**Point rects are addressable**: each point's `<rect>` carries
+`data-point="N"` (N = 1–24, the same index the callback reports), and no other
+region's rect carries the attribute — so `rect[data-point]` is exactly the
+point set and `rect[data-point="7"]` is point 7. This is for out-of-process
+drivers: a browser-automation harness cannot bind an `EventCallback`, and
+before the attribute its only handle was the overlay's render order (rect
+index = point − 1), a positional contract documented at the consumer and never
+stated by the producer (`halheinrich/backgammon#13`). Render order is
+unchanged, so the positional reading still holds and is test-pinned alongside
+the attribute; it is simply no longer the only one. A plain `data-` attribute
+rather than an `id`, deliberately: it repeats across two diagrams on one page
+without minting duplicate ids.
+
 ### BackgammonDiagram — catch-all attributes
 
 `[Parameter(CaptureUnmatchedValues = true)] Dictionary<string, object>? AdditionalAttributes`
@@ -394,7 +407,10 @@ checker is an ordinary advance from its home point, not a tray click.
 ### Test project
 
 bUnit + xUnit, targets .NET 10. `BackgammonDiagramTests` cover the view-only
-primitive (markup, hit-region overlay, callback wiring). `BackgammonPlayEntryTests`
+primitive (markup, hit-region overlay, callback wiring) and the point rects'
+`data-point` identity (present on all 24 and on nothing else, clickable by
+attribute selector, and in agreement with the render order it supersedes).
+`BackgammonPlayEntryTests`
 cover the play-entry contract: legal-completion firing, illegal no-ops,
 post-completion no-ops, undo round-trip via replay, value-equality reset on
 `(Mop, Dice)` change, identity preservation on equal `(Mop, Dice)`,
