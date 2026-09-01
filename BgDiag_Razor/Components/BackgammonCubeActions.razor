@@ -1,14 +1,30 @@
-<div class="bg-cube-actions" role="radiogroup" aria-label="Cube decision" @attributes="AdditionalAttributes">
-    @foreach (var (label, pair) in _cubeOptions)
-    {
-        var selected = Value == pair;
-        <label class="bg-cube-action@(selected ? " bg-cube-action-selected" : "")">
-            <input type="radio"
-                   name="@_groupName"
-                   value="@label"
-                   checked="@selected"
-                   @onchange="() => HandleSelected(pair)" />
-            @label
-        </label>
-    }
+<div class="bg-cube-actions" @attributes="AdditionalAttributes">
+    <div class="bg-cube-actions-group" role="radiogroup" aria-label="Doubler claim">
+        @foreach (var (label, claim) in _claimOptions)
+        {
+            var selected = _claim == claim;
+            <label class="bg-cube-action@(selected ? " bg-cube-action-selected" : "")">
+                <input type="radio"
+                       name="@_claimGroupName"
+                       value="@label"
+                       checked="@selected"
+                       @onchange="() => HandleClaimSelected(claim)" />
+                @label
+            </label>
+        }
+    </div>
+    <div class="bg-cube-actions-group" role="radiogroup" aria-label="Taker response">
+        @foreach (var (label, taker) in _takerOptions)
+        {
+            var selected = _taker == taker;
+            <label class="bg-cube-action@(selected ? " bg-cube-action-selected" : "")">
+                <input type="radio"
+                       name="@_takerGroupName"
+                       value="@label"
+                       checked="@selected"
+                       @onchange="() => HandleTakerSelected(taker)" />
+                @label
+            </label>
+        }
+    </div>
 </div>
