@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
 using Bunit;
@@ -10,45 +11,42 @@ namespace BgDiag_Razor.Tests;
 public class BackgammonCubeActionsTests : BunitContext
 {
     // -----------------------------------------------------------------------
-    //  Fixtures — the two axes in render order, mirroring the component's
-    //  _claimOptions / _takerOptions tables. The claim axis is CubeClaim's own
-    //  declaration order ({No Double, Double, Too Good}, as the umbrella's
-    //  SPEC-scoring.md §3 rules it for halheinrich/backgammon#86); the taker
-    //  axis is Take before Pass.
+    //  Fixtures — the four offered pairs in render order, mirroring the
+    //  component's _options table: the reachable verdicts of the umbrella's
+    //  SPEC-scoring.md §3 as amended 2026-09-02 (halheinrich/backgammon#187),
+    //  walking the claim axis in CubeClaim's declaration order and the taker
+    //  axis Take-before-Pass within it. The first three are offered for every
+    //  cube decision; the fourth only when the position admits Too Good.
     // -----------------------------------------------------------------------
 
-    private static readonly (string Label, CubeClaim Claim)[] ClaimOptions =
+    private static readonly (string Label, CubeClaimPair Pair)[] Options =
     [
-        ("No double", CubeClaim.NoDouble),
-        ("Double",    CubeClaim.Double),
-        ("Too good",  CubeClaim.TooGood),
+        ("No double / Take", CubeClaimPair.NoDoubleTake),
+        ("Double / Take",    CubeClaimPair.DoubleTake),
+        ("Double / Pass",    CubeClaimPair.DoublePass),
+        ("Too good / Pass",  CubeClaimPair.TooGoodPass),
     ];
 
-    private static readonly (string Label, CubeAction Taker)[] TakerOptions =
-    [
-        ("Take", CubeAction.Take),
-        ("Pass", CubeAction.Pass),
-    ];
+    private static readonly IReadOnlyList<string> AllLabels =
+        Options.Select(o => o.Label).ToList();
 
-    private static int ClaimIndex(CubeClaim claim) =>
-        Array.FindIndex(ClaimOptions, o => o.Claim == claim);
+    private static readonly IReadOnlyList<string> LabelsWithoutTooGood =
+        AllLabels.Take(3).ToList();
 
-    private static int TakerIndex(CubeAction taker) =>
-        Array.FindIndex(TakerOptions, o => o.Taker == taker);
+    private static int IndexOf(CubeClaimPair pair) =>
+        Array.FindIndex(Options, o => o.Pair == pair);
 
-    private static string ClaimLabel(CubeClaim claim) => ClaimOptions[ClaimIndex(claim)].Label;
+    private static string LabelOf(CubeClaimPair pair) => Options[IndexOf(pair)].Label;
 
-    private static string TakerLabel(CubeAction taker) => TakerOptions[TakerIndex(taker)].Label;
-
-    /// <summary>The doubler-claim group's radios, in render order.</summary>
-    private static IReadOnlyList<AngleSharp.Dom.IElement> ClaimRadios(
+    /// <summary>The group's radios, in render order.</summary>
+    private static IReadOnlyList<AngleSharp.Dom.IElement> Radios(
         IRenderedComponent<BackgammonCubeActions> cut) =>
-        cut.FindAll("[aria-label=\"Doubler claim\"] input[type=radio]");
+        cut.FindAll("input[type=radio]");
 
-    /// <summary>The taker-response group's radios, in render order.</summary>
-    private static IReadOnlyList<AngleSharp.Dom.IElement> TakerRadios(
+    /// <summary>Every pill's caption, in render order.</summary>
+    private static IReadOnlyList<string> Labels(
         IRenderedComponent<BackgammonCubeActions> cut) =>
-        cut.FindAll("[aria-label=\"Taker response\"] input[type=radio]");
+        cut.FindAll(".bg-cube-action").Select(e => e.TextContent.Trim()).ToList();
 
     /// <summary>Every selected pill's caption, in render order.</summary>
     private static IReadOnlyList<string> SelectedLabels(
@@ -57,88 +55,94 @@ public class BackgammonCubeActionsTests : BunitContext
             .Select(e => e.TextContent.Trim())
             .ToList();
 
-    /// <summary>A row with a no-op binding — enough to render, adopts nothing.</summary>
-    private IRenderedComponent<BackgammonCubeActions> RenderRow() =>
+    /// <summary>
+    /// A row offering all four pairs with a no-op binding — enough to render,
+    /// adopts nothing.
+    /// </summary>
+    private IRenderedComponent<BackgammonCubeActions> RenderRow(
+        CubeClaimPair? value = null, bool offerTooGood = true) =>
         Render<BackgammonCubeActions>(p => p
+            .Add(c => c.Value, value)
+            .Add(c => c.OfferTooGood, offerTooGood)
             .Add(c => c.ValueChanged, (CubeClaimPair? _) => { }));
 
+    /// <summary>The theory data for the four offered pairs.</summary>
+    public static TheoryData<CubeClaimPair> OfferedPairs =>
+        new(Options.Select(o => o.Pair));
+
+    /// <summary>The theory data for the three pairs offered without Too Good.</summary>
+    public static TheoryData<CubeClaimPair> PairsOfferedWithoutTooGood =>
+        new(Options.Take(3).Select(o => o.Pair));
+
     // -----------------------------------------------------------------------
-    //  Render shape — two orthogonal groups, not one compound list
+    //  Render shape — one radio group of whole pairs, in the ruled order
     // -----------------------------------------------------------------------
 
     [Fact]
-    public void Render_ContainsTwoRadioGroups_ClaimThenTaker()
+    public void Render_IsOneRadioGroup_OfTheFourPairsInRuledOrder()
     {
         var cut = RenderRow();
 
-        var groups = cut.FindAll("[role=radiogroup]");
-        Assert.Equal(2, groups.Count);
-        Assert.Equal("Doubler claim", groups[0].GetAttribute("aria-label"));
-        Assert.Equal("Taker response", groups[1].GetAttribute("aria-label"));
+        var group = Assert.Single(cut.FindAll("[role=radiogroup]"));
+        Assert.Equal("Cube decision", group.GetAttribute("aria-label"));
+        Assert.True(group.ClassList.Contains("bg-cube-actions"),
+            "the root div is itself the radio group — there is no nested group element.");
 
-        // Three claims × two responses — the 3×2 the answer type is closed over.
-        Assert.Equal(3, ClaimRadios(cut).Count);
-        Assert.Equal(2, TakerRadios(cut).Count);
-
-        foreach (var (label, _) in ClaimOptions)
-            Assert.Contains(label, cut.Markup);
-        foreach (var (label, _) in TakerOptions)
-            Assert.Contains(label, cut.Markup);
+        Assert.Equal(4, Radios(cut).Count);
+        Assert.Equal(AllLabels, Labels(cut));
     }
 
     /// <summary>
-    /// Uniform availability (SPEC-scoring §3): "Too good" is offered for every
-    /// cube decision whatever is selected and whatever rules are in force —
-    /// nothing about a row's state withdraws a claim. Too Good genuinely occurs
-    /// in money as well as matches (under Jacoby, via redoubles), so there is no
-    /// context in which hiding it would be right; the pin is that the claim
-    /// group is always the same three options.
+    /// Too Good is offered by fact (SPEC-scoring §3, 2026-09-02 amendment,
+    /// halheinrich/backgammon#187): the consumer passes the producer's
+    /// <c>BgDecisionData.CanBeTooGood</c>, and when it is <c>false</c> — a
+    /// money position under Jacoby with the cube centred — the fourth pill is
+    /// not rendered at all. The other three are the same three, in the same
+    /// order, so nothing shifts under the user.
     /// </summary>
     [Fact]
-    public void Render_AlwaysOffersAllThreeClaims_TooGoodIncluded()
+    public void Render_OfferTooGoodFalse_OmitsTheFourthPill()
     {
-        // Every state Value can be in: unanswered, plus all six cells.
-        CubeClaimPair?[] everyValueState =
-        [
-            null,
-            CubeClaimPair.NoDoubleTake,
-            CubeClaimPair.NoDoublePass,
-            CubeClaimPair.DoubleTake,
-            CubeClaimPair.DoublePass,
-            CubeClaimPair.TooGoodTake,
-            CubeClaimPair.TooGoodPass,
-        ];
+        var cut = RenderRow(offerTooGood: false);
+
+        Assert.Single(cut.FindAll("[role=radiogroup]"));
+        Assert.Equal(3, Radios(cut).Count);
+        Assert.Equal(LabelsWithoutTooGood, Labels(cut));
+        Assert.DoesNotContain("Too good", cut.Markup);
+    }
+
+    /// <summary>
+    /// The complement: with the fact <c>true</c> the pill is there whatever
+    /// the row's own state, so the fact is the only thing that withholds it.
+    /// </summary>
+    [Fact]
+    public void Render_OfferTooGoodTrue_OffersTooGoodInEveryValueState()
+    {
+        CubeClaimPair?[] everyValueState = [null, .. Options.Select(o => (CubeClaimPair?)o.Pair)];
 
         foreach (var value in everyValueState)
         {
-            var cut = Render<BackgammonCubeActions>(p => p
-                .Add(c => c.Value, value)
-                .Add(c => c.ValueChanged, (CubeClaimPair? _) => { }));
-
-            Assert.Equal(
-                ClaimOptions.Select(o => o.Label),
-                cut.FindAll("[aria-label=\"Doubler claim\"] .bg-cube-action")
-                    .Select(e => e.TextContent.Trim()));
-            Assert.Contains("Too good", cut.Markup);
+            var cut = RenderRow(value);
+            Assert.Equal(AllLabels, Labels(cut));
         }
     }
 
-    [Fact]
-    public void Render_NullValue_NothingSelected()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Render_NullValue_NothingSelected(bool offerTooGood)
     {
-        var cut = Render<BackgammonCubeActions>(p => p
-            .Add(c => c.Value, null)
-            .Add(c => c.ValueChanged, (CubeClaimPair? _) => { }));
+        var cut = RenderRow(value: null, offerTooGood: offerTooGood);
 
-        Assert.Empty(cut.FindAll(".bg-cube-action-selected"));
-        Assert.All(ClaimRadios(cut), r => Assert.False(r.HasAttribute("checked")));
-        Assert.All(TakerRadios(cut), r => Assert.False(r.HasAttribute("checked")));
+        Assert.Empty(SelectedLabels(cut));
+        Assert.All(Radios(cut), r => Assert.False(r.HasAttribute("checked")));
     }
 
     [Fact]
     public void AdditionalAttributes_AreSplattedOnRootDiv()
     {
         var cut = Render<BackgammonCubeActions>(p => p
+            .Add(c => c.OfferTooGood, true)
             .Add(c => c.ValueChanged, (CubeClaimPair? _) => { })
             .AddUnmatched("data-testid", "cube-actions-1"));
 
@@ -147,203 +151,132 @@ public class BackgammonCubeActionsTests : BunitContext
     }
 
     // -----------------------------------------------------------------------
-    //  Value → selection. One pill lit per group, both halves read from the
-    //  pair; all six cells render, the incoherent one included.
+    //  Value → selection. Exactly one pill lit, the one whose pair it is.
     // -----------------------------------------------------------------------
 
     [Theory]
-    [InlineData(CubeClaim.NoDouble, CubeAction.Take)]
-    [InlineData(CubeClaim.NoDouble, CubeAction.Pass)]
-    [InlineData(CubeClaim.Double,   CubeAction.Take)]
-    [InlineData(CubeClaim.Double,   CubeAction.Pass)]
-    [InlineData(CubeClaim.TooGood,  CubeAction.Take)]
-    [InlineData(CubeClaim.TooGood,  CubeAction.Pass)]
-    public void Value_MarksTheMatchingPillInEachGroup(CubeClaim claim, CubeAction taker)
+    [MemberData(nameof(OfferedPairs))]
+    public void Value_MarksExactlyTheMatchingPill(CubeClaimPair pair)
     {
-        var cut = Render<BackgammonCubeActions>(p => p
-            .Add(c => c.Value, new CubeClaimPair(claim, taker))
-            .Add(c => c.ValueChanged, (CubeClaimPair? _) => { }));
+        var cut = RenderRow(pair);
 
-        Assert.Equal(new[] { ClaimLabel(claim), TakerLabel(taker) }, SelectedLabels(cut));
-        Assert.True(ClaimRadios(cut)[ClaimIndex(claim)].HasAttribute("checked"));
-        Assert.True(TakerRadios(cut)[TakerIndex(taker)].HasAttribute("checked"));
+        Assert.Equal([LabelOf(pair)], SelectedLabels(cut));
+
+        var radios = Radios(cut);
+        for (var i = 0; i < radios.Count; i++)
+            Assert.Equal(i == IndexOf(pair), radios[i].HasAttribute("checked"));
+    }
+
+    /// <summary>
+    /// The two cells <c>CubeClaimPair</c> still represents but no cube
+    /// decision offers — the retired (Too Good, Take) verdict and the
+    /// incoherent (No Double, Pass) — render nothing selected. That is a
+    /// caller bug surfacing, and it is pinned as one: the row must not remap
+    /// an unoffered pair onto some pill as a fallback.
+    /// </summary>
+    [Fact]
+    public void Value_OutsideTheOfferedPairs_RendersNothingSelected()
+    {
+        foreach (var unoffered in new[] { CubeClaimPair.TooGoodTake, CubeClaimPair.NoDoublePass })
+        {
+            var cut = RenderRow(unoffered);
+
+            Assert.Equal(AllLabels, Labels(cut));
+            Assert.Empty(SelectedLabels(cut));
+            Assert.All(Radios(cut), r => Assert.False(r.HasAttribute("checked")));
+        }
+    }
+
+    /// <summary>
+    /// The same rule at the offerability gate: a Too Good answer handed to a
+    /// row whose position cannot be too good has no pill to be, so nothing is
+    /// selected — the three offered pills stay unlit rather than one of them
+    /// standing in.
+    /// </summary>
+    [Fact]
+    public void Value_TooGoodPass_WithOfferTooGoodFalse_RendersNothingSelected()
+    {
+        var cut = RenderRow(CubeClaimPair.TooGoodPass, offerTooGood: false);
+
+        Assert.Equal(LabelsWithoutTooGood, Labels(cut));
+        Assert.Empty(SelectedLabels(cut));
+        Assert.All(Radios(cut), r => Assert.False(r.HasAttribute("checked")));
     }
 
     [Fact]
-    public void ClearingValue_ClearsBothHalves()
+    public void ClearingValue_ClearsTheSelection()
     {
         // The consumer's advance-to-next-problem path: there is no request to
         // key an automatic reset off, so the consumer clears by setting Value
-        // back to null — and both halves go, not just the one it last changed.
-        var cut = Render<BackgammonCubeActions>(p => p
-            .Add(c => c.Value, CubeClaimPair.DoublePass)
-            .Add(c => c.ValueChanged, (CubeClaimPair? _) => { }));
-        Assert.Equal(2, cut.FindAll(".bg-cube-action-selected").Count);
+        // back to null.
+        var cut = RenderRow(CubeClaimPair.DoublePass);
+        Assert.Single(SelectedLabels(cut));
 
         cut.Render(p => p.Add(c => c.Value, null));
 
-        Assert.Empty(cut.FindAll(".bg-cube-action-selected"));
+        Assert.Empty(SelectedLabels(cut));
+        Assert.All(Radios(cut), r => Assert.False(r.HasAttribute("checked")));
     }
 
     // -----------------------------------------------------------------------
-    //  Half-at-a-time entry. Each group moves on its own; the answer exists
-    //  only once both have moved, and selecting in one never completes the
-    //  other for the user.
+    //  Selection → ValueChanged. One radio is one whole pair: every selection
+    //  fires once with its pair, never null, and there is no half-answered
+    //  state for anything to be silent about.
     // -----------------------------------------------------------------------
 
-    [Fact]
-    public async Task SelectingOnlyTheClaim_LeavesTheAnswerIncompleteAndSilent()
-    {
-        var fireCount = 0;
-        var cut = Render<BackgammonCubeActions>(p => p
-            .Add(c => c.ValueChanged, (CubeClaimPair? _) => fireCount++));
-
-        await ClaimRadios(cut)[ClaimIndex(CubeClaim.TooGood)]
-            .ChangeAsync(new ChangeEventArgs { Value = true });
-
-        // The claim shows; the taker half is untouched, so there is no pair to
-        // report and the consumer's Value stays null.
-        Assert.Equal(new[] { "Too good" }, SelectedLabels(cut));
-        Assert.All(TakerRadios(cut), r => Assert.False(r.HasAttribute("checked")));
-        Assert.Equal(0, fireCount);
-    }
-
-    [Fact]
-    public async Task SelectingOnlyTheTaker_LeavesTheAnswerIncompleteAndSilent()
-    {
-        var fireCount = 0;
-        var cut = Render<BackgammonCubeActions>(p => p
-            .Add(c => c.ValueChanged, (CubeClaimPair? _) => fireCount++));
-
-        await TakerRadios(cut)[TakerIndex(CubeAction.Pass)]
-            .ChangeAsync(new ChangeEventArgs { Value = true });
-
-        Assert.Equal(new[] { "Pass" }, SelectedLabels(cut));
-        Assert.All(ClaimRadios(cut), r => Assert.False(r.HasAttribute("checked")));
-        Assert.Equal(0, fireCount);
-    }
-
-    /// <summary>
-    /// Every one of the six cells is reachable by picking the claim and then
-    /// the response, and each fires exactly once with the composed pair. The
-    /// incoherent (No double, Pass) row is deliberately among them: the axes
-    /// are not cross-disabled, because the answer is representable and merely
-    /// never best (SPEC-scoring §3).
-    /// </summary>
     [Theory]
-    [InlineData(CubeClaim.NoDouble, CubeAction.Take)]
-    [InlineData(CubeClaim.NoDouble, CubeAction.Pass)]
-    [InlineData(CubeClaim.Double,   CubeAction.Take)]
-    [InlineData(CubeClaim.Double,   CubeAction.Pass)]
-    [InlineData(CubeClaim.TooGood,  CubeAction.Take)]
-    [InlineData(CubeClaim.TooGood,  CubeAction.Pass)]
-    public async Task ClaimThenTaker_FiresOnceWithTheComposedPair(
-        CubeClaim claim, CubeAction taker)
+    [MemberData(nameof(OfferedPairs))]
+    public async Task SelectingAPill_FiresOnceWithItsPair(CubeClaimPair pair)
     {
         CubeClaimPair? received = null;
         var fireCount = 0;
 
         var cut = Render<BackgammonCubeActions>(p => p
+            .Add(c => c.OfferTooGood, true)
             .Add(c => c.ValueChanged,
-                (CubeClaimPair? pair) => { received = pair; fireCount++; }));
+                (CubeClaimPair? received_) => { received = received_; fireCount++; }));
 
-        await ClaimRadios(cut)[ClaimIndex(claim)]
-            .ChangeAsync(new ChangeEventArgs { Value = true });
-        await TakerRadios(cut)[TakerIndex(taker)]
-            .ChangeAsync(new ChangeEventArgs { Value = true });
+        await Radios(cut)[IndexOf(pair)].ChangeAsync(new ChangeEventArgs { Value = true });
 
         Assert.Equal(1, fireCount);
-        Assert.Equal(new CubeClaimPair(claim, taker), received);
+        Assert.NotNull(received);
+        Assert.Equal(pair, received);
     }
 
     /// <summary>
-    /// The same six cells in the other entry order — the halves are genuinely
-    /// independent, so answering the response first reaches every cell too.
+    /// With Too Good withheld the three remaining radios still map to their
+    /// own pairs — withholding the fourth pill shifts no index onto a
+    /// neighbour's pair.
     /// </summary>
     [Theory]
-    [InlineData(CubeClaim.NoDouble, CubeAction.Take)]
-    [InlineData(CubeClaim.NoDouble, CubeAction.Pass)]
-    [InlineData(CubeClaim.Double,   CubeAction.Take)]
-    [InlineData(CubeClaim.Double,   CubeAction.Pass)]
-    [InlineData(CubeClaim.TooGood,  CubeAction.Take)]
-    [InlineData(CubeClaim.TooGood,  CubeAction.Pass)]
-    public async Task TakerThenClaim_FiresOnceWithTheComposedPair(
-        CubeClaim claim, CubeAction taker)
+    [MemberData(nameof(PairsOfferedWithoutTooGood))]
+    public async Task SelectingAPill_WithTooGoodWithheld_FiresWithItsOwnPair(CubeClaimPair pair)
     {
         CubeClaimPair? received = null;
-        var fireCount = 0;
 
         var cut = Render<BackgammonCubeActions>(p => p
-            .Add(c => c.ValueChanged,
-                (CubeClaimPair? pair) => { received = pair; fireCount++; }));
+            .Add(c => c.OfferTooGood, false)
+            .Add(c => c.ValueChanged, (CubeClaimPair? received_) => received = received_));
 
-        await TakerRadios(cut)[TakerIndex(taker)]
-            .ChangeAsync(new ChangeEventArgs { Value = true });
-        await ClaimRadios(cut)[ClaimIndex(claim)]
-            .ChangeAsync(new ChangeEventArgs { Value = true });
+        await Radios(cut)[IndexOf(pair)].ChangeAsync(new ChangeEventArgs { Value = true });
 
-        Assert.Equal(1, fireCount);
-        Assert.Equal(new CubeClaimPair(claim, taker), received);
+        Assert.Equal(pair, received);
     }
 
-    /// <summary>
-    /// The incoherent cell, called out on its own because it is the one the
-    /// component could have been tempted to prevent: "not good enough to
-    /// double, yet they'd pass". It is selectable, it round-trips, and the pair
-    /// it emits is the one <see cref="CubeClaimPair.IsIncoherent"/> names —
-    /// this row represents an answer, it never prevents one.
-    /// </summary>
     [Fact]
-    public async Task IncoherentCell_IsSelectableAndEmittedLikeAnyOther()
-    {
-        CubeClaimPair? received = null;
-        var cut = Render<BackgammonCubeActions>(p => p
-            .Add(c => c.ValueChanged, (CubeClaimPair? pair) => received = pair));
-
-        await ClaimRadios(cut)[ClaimIndex(CubeClaim.NoDouble)]
-            .ChangeAsync(new ChangeEventArgs { Value = true });
-        await TakerRadios(cut)[TakerIndex(CubeAction.Pass)]
-            .ChangeAsync(new ChangeEventArgs { Value = true });
-
-        Assert.Equal(CubeClaimPair.NoDoublePass, received);
-        Assert.True(received!.Value.IsIncoherent);
-
-        cut.Render(p => p.Add(c => c.Value, received));
-        Assert.Equal(new[] { "No double", "Pass" }, SelectedLabels(cut));
-    }
-
-    // -----------------------------------------------------------------------
-    //  Re-firing — once complete, either half can still be changed and the
-    //  recomposed pair is reported each time.
-    // -----------------------------------------------------------------------
-
-    [Fact]
-    public async Task ChangingTheClaimOfACompleteAnswer_RefiresWithTheNewPair()
+    public async Task ChangingTheSelection_RefiresWithTheNewPair()
     {
         var received = new List<CubeClaimPair?>();
         var cut = Render<BackgammonCubeActions>(p => p
             .Add(c => c.Value, CubeClaimPair.NoDoubleTake)
+            .Add(c => c.OfferTooGood, true)
             .Add(c => c.ValueChanged, (CubeClaimPair? pair) => received.Add(pair)));
 
-        await ClaimRadios(cut)[ClaimIndex(CubeClaim.TooGood)]
+        await Radios(cut)[IndexOf(CubeClaimPair.TooGoodPass)]
             .ChangeAsync(new ChangeEventArgs { Value = true });
 
-        // Only the claim moved — the taker half it was already carrying stands.
-        Assert.Equal([CubeClaimPair.TooGoodTake], received);
-    }
-
-    [Fact]
-    public async Task ChangingTheTakerOfACompleteAnswer_RefiresWithTheNewPair()
-    {
-        var received = new List<CubeClaimPair?>();
-        var cut = Render<BackgammonCubeActions>(p => p
-            .Add(c => c.Value, CubeClaimPair.DoubleTake)
-            .Add(c => c.ValueChanged, (CubeClaimPair? pair) => received.Add(pair)));
-
-        await TakerRadios(cut)[TakerIndex(CubeAction.Pass)]
-            .ChangeAsync(new ChangeEventArgs { Value = true });
-
-        Assert.Equal([CubeClaimPair.DoublePass], received);
+        // No one-shot lock: a row already holding an answer reports the new one.
+        Assert.Equal([CubeClaimPair.TooGoodPass], received);
     }
 
     // -----------------------------------------------------------------------
@@ -353,110 +286,79 @@ public class BackgammonCubeActionsTests : BunitContext
     // -----------------------------------------------------------------------
 
     [Fact]
-    public async Task ValueWriteback_RoundTrip_CompletesThenSwitchesEitherHalf()
+    public async Task ValueWriteback_RoundTrip_SelectsThenSwitches()
     {
         CubeClaimPair? current = null;
 
         var cut = Render<BackgammonCubeActions>(p => p
             .Add(c => c.Value, current)
+            .Add(c => c.OfferTooGood, true)
             .Add(c => c.ValueChanged, (CubeClaimPair? pair) => current = pair));
 
-        // Complete the answer as "Double" + "Pass"; the parent writes it back.
-        await ClaimRadios(cut)[ClaimIndex(CubeClaim.Double)]
-            .ChangeAsync(new ChangeEventArgs { Value = true });
-        await TakerRadios(cut)[TakerIndex(CubeAction.Pass)]
+        await Radios(cut)[IndexOf(CubeClaimPair.DoublePass)]
             .ChangeAsync(new ChangeEventArgs { Value = true });
         Assert.Equal(CubeClaimPair.DoublePass, current);
 
         cut.Render(p => p.Add(c => c.Value, current));
-        Assert.Equal(new[] { "Double", "Pass" }, SelectedLabels(cut));
+        Assert.Equal(["Double / Pass"], SelectedLabels(cut));
 
-        // Switch the claim to "Too good": the written-back value follows, and so
-        // does the rendered selection — the taker half surviving the round trip.
-        await ClaimRadios(cut)[ClaimIndex(CubeClaim.TooGood)]
+        await Radios(cut)[IndexOf(CubeClaimPair.TooGoodPass)]
             .ChangeAsync(new ChangeEventArgs { Value = true });
         Assert.Equal(CubeClaimPair.TooGoodPass, current);
 
         cut.Render(p => p.Add(c => c.Value, current));
-        Assert.Equal(new[] { "Too good", "Pass" }, SelectedLabels(cut));
-
-        // And the taker half switches the same way.
-        await TakerRadios(cut)[TakerIndex(CubeAction.Take)]
-            .ChangeAsync(new ChangeEventArgs { Value = true });
-        Assert.Equal(CubeClaimPair.TooGoodTake, current);
-
-        cut.Render(p => p.Add(c => c.Value, current));
-        Assert.Equal(new[] { "Too good", "Take" }, SelectedLabels(cut));
+        Assert.Equal(["Too good / Pass"], SelectedLabels(cut));
     }
 
     /// <summary>
-    /// The halves are the component's own state only because a half-answered row
-    /// has no <c>CubeClaimPair</c> to be — they stay subordinate to
-    /// <c>Value</c>. A consumer that binds <c>ValueChanged</c> but never writes
-    /// the pair back therefore never adopts the answer: the next parameter pass
-    /// re-seeds both halves from the value it is still holding, and the
-    /// selection snaps back.
+    /// Strictly controlled: the row holds no selection of its own. A consumer
+    /// that binds <c>ValueChanged</c> but never writes the pair back never
+    /// adopts the answer — the next render still reads the <c>Value</c> it is
+    /// holding, and the selection is whatever that says.
     /// </summary>
     [Fact]
-    public async Task StrictlySubordinate_HalvesReseedFromValue_WithoutAWriteback()
-    {
-        var cut = Render<BackgammonCubeActions>(p => p
-            .Add(c => c.ValueChanged, (CubeClaimPair? _) => { }));
-
-        await ClaimRadios(cut)[ClaimIndex(CubeClaim.Double)]
-            .ChangeAsync(new ChangeEventArgs { Value = true });
-        await TakerRadios(cut)[TakerIndex(CubeAction.Take)]
-            .ChangeAsync(new ChangeEventArgs { Value = true });
-        Assert.Equal(2, cut.FindAll(".bg-cube-action-selected").Count);
-
-        // The consumer re-renders still holding null — the answer was never
-        // adopted, so it goes.
-        cut.Render(p => p.Add(c => c.Value, null));
-
-        Assert.Empty(cut.FindAll(".bg-cube-action-selected"));
-        Assert.All(ClaimRadios(cut), r => Assert.False(r.HasAttribute("checked")));
-        Assert.All(TakerRadios(cut), r => Assert.False(r.HasAttribute("checked")));
-    }
-
-    /// <summary>
-    /// The complement of the rule above: an in-progress half must survive an
-    /// unrelated re-render. A half-answered row composes to null, which is what
-    /// the consumer is still holding, so the two agree and nothing is re-seeded.
-    /// </summary>
-    [Fact]
-    public async Task HalfAnsweredRow_SurvivesAReRenderThatLeavesValueNull()
-    {
-        var cut = Render<BackgammonCubeActions>(p => p
-            .Add(c => c.ValueChanged, (CubeClaimPair? _) => { }));
-
-        await ClaimRadios(cut)[ClaimIndex(CubeClaim.TooGood)]
-            .ChangeAsync(new ChangeEventArgs { Value = true });
-
-        cut.Render(p => p.AddUnmatched("data-testid", "cube-actions-1"));
-
-        Assert.Equal(new[] { "Too good" }, SelectedLabels(cut));
-    }
-
-    // -----------------------------------------------------------------------
-    //  Radio group names — the two axes must not be mutually exclusive with
-    //  each other, and two rows on one page must not cross-link either.
-    // -----------------------------------------------------------------------
-
-    [Fact]
-    public void ClaimAndTakerGroups_UseDifferentRadioNames()
+    public async Task StrictlyControlled_SelectionFollowsValue_WithoutAWriteback()
     {
         var cut = RenderRow();
 
-        var claimNames = ClaimRadios(cut).Select(r => r.GetAttribute("name")).ToList();
-        var takerNames = TakerRadios(cut).Select(r => r.GetAttribute("name")).ToList();
+        await Radios(cut)[IndexOf(CubeClaimPair.DoubleTake)]
+            .ChangeAsync(new ChangeEventArgs { Value = true });
 
-        // Within a group all radios share one name (native mutual exclusion)...
-        Assert.Single(claimNames.Distinct());
-        Assert.Single(takerNames.Distinct());
+        cut.Render(p => p.Add(c => c.Value, null));
 
-        // ...and across the axes the names differ, or choosing a claim would
-        // deselect the response.
-        Assert.NotEqual(claimNames[0], takerNames[0]);
+        Assert.Empty(SelectedLabels(cut));
+        Assert.All(Radios(cut), r => Assert.False(r.HasAttribute("checked")));
+    }
+
+    // -----------------------------------------------------------------------
+    //  Required parameters — the promoted mechanism for silent splats. A
+    //  consumer that omits either fails RZ2012 under warnings-as-errors; the
+    //  attribute's presence is what that gate stands on.
+    // -----------------------------------------------------------------------
+
+    [Theory]
+    [InlineData(nameof(BackgammonCubeActions.ValueChanged))]
+    [InlineData(nameof(BackgammonCubeActions.OfferTooGood))]
+    public void Parameter_IsEditorRequired(string parameterName)
+    {
+        var property = typeof(BackgammonCubeActions).GetProperty(parameterName)!;
+
+        Assert.NotNull(property.GetCustomAttribute<ParameterAttribute>());
+        Assert.NotNull(property.GetCustomAttribute<EditorRequiredAttribute>());
+    }
+
+    // -----------------------------------------------------------------------
+    //  Radio group name — one name for the whole row (native mutual
+    //  exclusion), and two rows on one page must not cross-link.
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public void AllRadios_ShareOneGroupName()
+    {
+        var names = Radios(RenderRow()).Select(r => r.GetAttribute("name")).ToList();
+
+        Assert.Equal(4, names.Count);
+        Assert.Single(names.Distinct());
     }
 
     [Fact]
@@ -466,50 +368,52 @@ public class BackgammonCubeActionsTests : BunitContext
         var second = RenderRow();
 
         Assert.NotEqual(
-            ClaimRadios(first)[0].GetAttribute("name"),
-            ClaimRadios(second)[0].GetAttribute("name"));
-        Assert.NotEqual(
-            TakerRadios(first)[0].GetAttribute("name"),
-            TakerRadios(second)[0].GetAttribute("name"));
+            Radios(first)[0].GetAttribute("name"),
+            Radios(second)[0].GetAttribute("name"));
     }
 
     // -----------------------------------------------------------------------
-    //  The retired composite surface — a grep-style pin.
+    //  The retired two-axis surface — a grep-style pin.
     //
-    //  The four-option compound list is gone, not shimmed: the component no
-    //  longer names CubeDecisionPair, no longer carries the single
-    //  (label, pair) table, and no longer spells the compound captions (whose
-    //  "Too good" mapped to (NoDouble, Pass) — a claim its label did not name).
-    //  Sources are read with comments stripped, so prose about the old shape
-    //  cannot fail an assertion about the code, nor satisfy one.
+    //  The two orthogonal groups are gone, not shimmed: the component no
+    //  longer renders a nested group element or the per-axis accessible
+    //  names, no longer carries the per-axis tables or the half-selection
+    //  state that a two-group row needed, and never names the action-level
+    //  CubeDecisionPair that predates the claim layer. Sources are read with
+    //  comments stripped, so prose about the old shapes cannot fail an
+    //  assertion about the code, nor satisfy one.
     // -----------------------------------------------------------------------
 
     [Fact]
-    public void RetiredCompositeSurface_IsGoneFromTheComponentSource()
+    public void RetiredTwoAxisSurface_IsGoneFromTheComponentSource()
     {
         var code = StripComments(ComponentSource("BackgammonCubeActions.razor.cs"))
                  + StripComments(ComponentSource("BackgammonCubeActions.razor"));
 
+        Assert.DoesNotContain("bg-cube-actions-group", code);
+        Assert.DoesNotContain("Doubler claim", code);
+        Assert.DoesNotContain("Taker response", code);
+        Assert.DoesNotContain("_claimOptions", code);
+        Assert.DoesNotContain("_takerOptions", code);
+        Assert.DoesNotContain("OnParametersSet", code);
         Assert.DoesNotContain("CubeDecisionPair", code);
-        Assert.DoesNotContain("_cubeOptions", code);
-        Assert.DoesNotContain("Double/Take", code);
-        Assert.DoesNotContain("Double/Pass", code);
 
-        // ...and the claim-layer surface is what replaced it.
+        // ...and the pair-valued, fact-gated surface is what stands.
         Assert.Contains("CubeClaimPair", code);
-        Assert.Contains("CubeClaim.TooGood", code);
+        Assert.Contains("OfferTooGood", code);
     }
 
     [Fact]
-    public void RetiredCompositeLabels_AreGoneFromTheRenderedRow()
+    public void RetiredTwoAxisSurface_IsGoneFromTheRenderedRow()
     {
-        var markup = RenderRow().Markup;
+        var cut = RenderRow();
 
-        Assert.DoesNotContain("Double/Take", markup);
-        Assert.DoesNotContain("Double/Pass", markup);
+        Assert.Empty(cut.FindAll(".bg-cube-actions-group"));
+        Assert.Empty(cut.FindAll("[aria-label=\"Doubler claim\"]"));
+        Assert.Empty(cut.FindAll("[aria-label=\"Taker response\"]"));
 
-        // The compound row was one group of four; this is two groups of 3 + 2.
-        Assert.Equal(2, RenderRow().FindAll("[role=radiogroup]").Count);
+        // The two-axis row was two groups of 3 + 2; this is one group of four.
+        Assert.Single(cut.FindAll("[role=radiogroup]"));
     }
 
     // -----------------------------------------------------------------------
@@ -532,13 +436,13 @@ public class BackgammonCubeActionsTests : BunitContext
     /// behavior (arrow-key roving, mutual exclusion by name) and its accessible
     /// name with it — the cheap way to "remove the dot", and the wrong one.
     /// </summary>
-    [Fact]
-    public void Render_RadioInputs_StayRealFocusableControls()
+    [Theory]
+    [InlineData(true, 4)]
+    [InlineData(false, 3)]
+    public void Render_RadioInputs_StayRealFocusableControls(bool offerTooGood, int expectedCount)
     {
-        var cut = RenderRow();
-
-        var radios = ClaimRadios(cut).Concat(TakerRadios(cut)).ToList();
-        Assert.Equal(5, radios.Count);
+        var radios = Radios(RenderRow(offerTooGood: offerTooGood));
+        Assert.Equal(expectedCount, radios.Count);
 
         foreach (var radio in radios)
         {
@@ -548,7 +452,8 @@ public class BackgammonCubeActionsTests : BunitContext
             Assert.False(radio.HasAttribute("aria-hidden"),
                 "aria-hidden would strip the control from the accessibility tree.");
             Assert.False(radio.HasAttribute("disabled"),
-                "a disabled radio is not focusable — and no cell is ever withdrawn.");
+                "a disabled radio is not focusable — an unoffered pair is not " +
+                "rendered, never rendered disabled.");
             Assert.False(radio.HasAttribute("tabindex"),
                 "the radios rely on the browser's native roving tab order; an " +
                 "explicit tabindex (least of all -1) would override it.");
@@ -602,7 +507,7 @@ public class BackgammonCubeActionsTests : BunitContext
     /// <summary>
     /// The focus ring the browser drew around the native dot is clipped away
     /// with it, so the pill has to draw one instead — without this rule a
-    /// keyboard user arrowing through a group has no visible cursor at all.
+    /// keyboard user arrowing through the group has no visible cursor at all.
     /// It rides <c>outline</c> deliberately: outlines draw outside the border
     /// box, so the ring cannot widen the row and reopen the wrap this whole
     /// change exists to close.
@@ -620,17 +525,25 @@ public class BackgammonCubeActionsTests : BunitContext
 
     /// <summary>
     /// The compaction constants, pinned with their arithmetic. Measured against
-    /// the live consumer, the old four compound pills totalled 561.6px — 56% of
-    /// the 1001.4px action row — and out-widened the checker row through the
-    /// 641–1366px band. The pill gap (0.75rem → 0.25rem), the pill's inline
-    /// padding (0.9rem → 0.45rem) and the hidden dot (13px control + its 0.5rem
-    /// caption gap) were the −165.6px that closed it, and the pill gap and
-    /// padding are unchanged here. Splitting the row into two groups spends one
-    /// 0.75rem inter-group gap (+12px) and one extra pill's chrome, and buys
-    /// back more than that in captions: "No double / Double / Too good / Take /
-    /// Pass" is shorter than "No double / Double/Take / Double/Pass / Too good".
-    /// bUnit cannot evaluate any of that; what it can do is stop the constants
-    /// being widened back without a fresh measurement.
+    /// the live consumer, the original four compound pills totalled 561.6px —
+    /// 56% of the 1001.4px action row — and out-widened the checker row
+    /// through the 641–1366px band. The pill gap (0.75rem → 0.25rem), the
+    /// pill's inline padding (0.9rem → 0.45rem) and the hidden dot (13px
+    /// control + its 0.5rem caption gap) were the −165.6px that closed it,
+    /// and all three stand here. The four-pair row at these constants
+    /// measures 136.2 + 113.9 + 116.0 + 131.1 = 497.2px of pills plus three
+    /// 4px gaps: 509.2px unselected, 516.8px with the widest pill selected
+    /// (weight 600 widens its caption), and 374.1px for the three pairs with
+    /// Too Good withheld — under the consumer's 16px Helvetica/Arial stack.
+    /// That is wider than the two-group row it replaces (364.8px) and than
+    /// the compacted compound row before that (396.0px): the compound
+    /// captions name both halves, which costs the width the five short
+    /// captions had saved. Whether 509px still clears the consumer's row is
+    /// the consumer's measurement to take; these numbers are its input. With
+    /// one group there is one gap, the compacted one: the wider inter-group
+    /// gap went with the second group. bUnit cannot evaluate any of that;
+    /// what it can do is stop the constants being widened back without a
+    /// fresh measurement.
     ///
     /// <para>
     /// The <i>vertical</i> metrics are pinned in the same breath because they
@@ -648,10 +561,10 @@ public class BackgammonCubeActionsTests : BunitContext
     {
         var css = CubeActionsCss();
 
-        // The pills inside a group keep the compacted gap; the groups sit apart
-        // at the wider one, which is the grouping's only visual signal.
-        Assert.Contains("gap: 0.25rem", Rule(css, ".bg-cube-actions-group"));
-        Assert.Contains("gap: 0.75rem", Rule(css, ".bg-cube-actions"));
+        // One group, one gap — the compacted one; no nested group rule is left
+        // to carry a wider one.
+        Assert.Contains("gap: 0.25rem", Rule(css, ".bg-cube-actions"));
+        Assert.DoesNotContain(".bg-cube-actions-group", css);
 
         var pill = Rule(css, ".bg-cube-action");
         Assert.Contains("padding: 0.5rem 0.45rem", pill);
@@ -664,8 +577,7 @@ public class BackgammonCubeActionsTests : BunitContext
     /// With the dot gone the pill's own styling is the entire selected
     /// affordance, so all three co-varying signals — border hue, fill, and
     /// weight — have to survive together. Any one of them alone is a weaker
-    /// "selected" than the state had before the dot was hidden. Both groups
-    /// share the rule: a completed answer lights one pill in each.
+    /// "selected" than the state had before the dot was hidden.
     /// </summary>
     [Fact]
     public void CubeActionsCss_SelectedPill_KeepsAllThreeSignals()

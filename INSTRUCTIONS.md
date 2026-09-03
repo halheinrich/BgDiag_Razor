@@ -28,8 +28,9 @@ https://github.com/halheinrich/BgDiag_Razor — branch `main`.
   primitives and the mutable board live in the shared-data layer; consumed
   here by `BackgammonPlayEntry` (`Play` on the public surface,
   `BoardState.FromMop` for state construction), by `BackgammonCubeActions`
-  (`CubeClaim` and `CubeAction` for its two radio axes, `CubeClaimPair` on
-  the public surface), and by tests. Referenced as a project reference (also
+  (`CubeClaimPair` on the public surface and its canonical instances as the
+  offered options; `CubeClaim` to gate the Too Good pair), and by tests.
+  Referenced as a project reference (also
   reachable transitively via BackgammonDiagram_Lib and BgMoveGen, but the
   explicit ref documents the direct dependency and insulates against future
   transitive-edge churn).
@@ -38,10 +39,12 @@ https://github.com/halheinrich/BgDiag_Razor — branch `main`.
   project reference. Transitively brings `BgMoveGen`'s standalone surface;
   this subproject does not consume the NativeAOT interop layer.
 
-`BackgammonCubeActions` consumes `CubeClaim` / `CubeAction` /
-`CubeClaimPair` from `BgDataTypes_Lib` for its two-axis answer surface. No
-`BgMoveGen` use — cube decisions have no checker-move state to drive — and no
-`BackgammonDiagram_Lib` use: the answer row is board-free.
+`BackgammonCubeActions` consumes `CubeClaimPair` (and `CubeClaim`, for the
+offerability gate) from `BgDataTypes_Lib` for its four-pair answer surface;
+the offerability fact itself is `BgDecisionData.CanBeTooGood`, read by the
+consumer and passed in. No `BgMoveGen` use — cube decisions have no
+checker-move state to drive — and no `BackgammonDiagram_Lib` use: the answer
+row is board-free.
 
 ## Directory tree
 
@@ -60,9 +63,9 @@ BgDiag_Razor/
     BackgammonPlayEntry.razor         — wraps BackgammonDiagram, drives state
     BackgammonPlayEntry.razor.cs      — code-behind, parameters, click routing
     BackgammonPlayEntry.razor.css     — scoped: bounded-height board slot
-    BackgammonCubeActions.razor       — free-standing claim × taker cube answer row
+    BackgammonCubeActions.razor       — free-standing four-pair cube answer row
     BackgammonCubeActions.razor.cs    — code-behind, controlled-value contract
-    BackgammonCubeActions.razor.css   — scoped: radio pills, two groups
+    BackgammonCubeActions.razor.css   — scoped: radio pills, one group
   wwwroot/
 BgDiag_Razor.Tests/
   BgDiag_Razor.Tests.csproj
@@ -94,11 +97,12 @@ each legal click and reporting the assembled `Play` once the user has
 clicked a complete legal sequence. Handles play decisions only
 (`Decision.IsCube == false`); cube decisions throw at the contract boundary.
 
-`BackgammonCubeActions` is the **free-standing cube answer row** — two
-orthogonal radio groups (the doubler's three-valued `CubeClaim` crossed with
-the taker's Take/Pass response) whose completed selection is one
-`CubeClaimPair`, with a controlled `Value` / `ValueChanged` contract
-(`@bind-Value` capable). It renders no board and takes no `DiagramRequest`:
+`BackgammonCubeActions` is the **free-standing cube answer row** — one radio
+group offering the reachable cube verdicts as whole `CubeClaimPair`s (No
+double / Take, Double / Take, Double / Pass, and Too good / Pass when the
+position admits it), with a controlled `Value` / `ValueChanged` contract
+(`@bind-Value` capable) and a required `OfferTooGood` fact the consumer reads
+from the producer. It renders no board and takes no `DiagramRequest`:
 a cube decision has no click-by-click board state, so — unlike the play
 half — there is nothing for an entry wrapper to encapsulate. Cube consumers
 render the position with `BackgammonDiagram` and place the answer row
@@ -240,36 +244,50 @@ is no symmetric guard on the cube side: `BackgammonCubeActions` takes no
 request, so it has nothing to reject — routing by `Decision.IsCube` stays
 consumer-side.
 
-### BackgammonCubeActions — markup and two axes
+### BackgammonCubeActions — markup and the one group
 
-The two-group shape is ruled by the umbrella's `SPEC-scoring.md` §3, for
-`halheinrich/backgammon#86`. `BackgammonCubeActions` renders one
-`bg-cube-actions` root holding **two** `role="radiogroup"` children
-(`bg-cube-actions-group`), one per axis of the answer:
+The four-pair shape is ruled by the umbrella's `SPEC-scoring.md` §3 as
+amended 2026-09-02 (`halheinrich/backgammon#187`). The answer is still the
+(claim, taker) pair that section models for `halheinrich/backgammon#86` —
+the doubler's `CubeClaim` about the position and the taker's Take/Pass
+response *if doubled*, scored per half — but Too Good now requires the pass,
+so the reachable verdict set is exactly four pairs and the option set is
+those four. `BackgammonCubeActions` renders one `bg-cube-actions` root that
+is itself the `role="radiogroup"` (`aria-label="Cube decision"`), holding
+the pills in this order:
 
-- **Doubler claim** (`aria-label="Doubler claim"`) — "No double", "Double",
-  "Too good": the three `CubeClaim` members, in the enum's own declaration
-  order, which is the axis as `SPEC-scoring.md` §3 rules it. The claim is
-  about the position, not a board action: both no-double claims perform the
-  identical action, and the distinction exists to be scored.
-- **Taker response** (`aria-label="Taker response"`) — "Take", "Pass": the
-  taker's answer *if doubled*, answered explicitly even when the claim is a
-  no-double. The retired compound row hid this by silently asserting Take.
+- **No double / Take** — `CubeClaimPair.NoDoubleTake`
+- **Double / Take** — `CubeClaimPair.DoubleTake`
+- **Double / Pass** — `CubeClaimPair.DoublePass`
+- **Too good / Pass** — `CubeClaimPair.TooGoodPass`, rendered only when
+  `OfferTooGood` is true
 
-Their cross-product is the closed 3×2 of `CubeClaimPair`. **All six cells are
-selectable**, the incoherent (No double, Pass) included — the axes are
-deliberately not cross-disabled: the cell is representable and merely never
-best, and choosing it reveals a misunderstanding a review surface can name
-(`CubeClaimPair.IsIncoherent`). **The option set is uniform**: "Too good" is
-offered for every cube decision whatever rules are in force, because Too Good
-genuinely occurs in money too, under Jacoby via redoubles. Nothing about a
-row's state withdraws an option. This component represents an answer; it
-never prevents one.
+The order walks the claim axis in `CubeClaim`'s declaration order and the
+taker axis Take-before-Pass within it, which is also the spec's verdict-table
+order. Each caption names both halves in sentence case, joined by " / " with
+each half keeping its own spelling (the `halheinrich/backgammon#185`
+ruling), so the taker half is never asserted silently the way the original
+compound captions did. Each pill submits the pair's own canonical instance;
+the component composes no pair of its own.
+
+**Two cells are not offered.** `CubeClaimPair` still represents the closed
+3×2, but `TooGoodTake` is a verdict the amendment retired and `NoDoublePass`
+is the incoherent cell the amendment made moot; neither has a pill. A `Value`
+holding either renders nothing selected (see the value contract).
+
+**Too good is offered by fact.** A money position under the Jacoby rule with
+a centred cube cannot be too good — gammons do not count until the cube
+turns, so the no-double equity never exceeds the cash — and the amendment
+rules the fourth pill withheld there (three pills). The fact is derived once,
+producer-side, as `BgDecisionData.CanBeTooGood`; the consumer passes it as
+`OfferTooGood`, and this component never re-derives it from rules fields it
+does not see. That is the only contextual change the row makes; the other
+three pairs are offered for every cube decision.
 
 Each option is a `<label class="bg-cube-action">` wrapping its own
-`<input type="radio">`; a selected option additionally carries
-`bg-cube-action-selected` for a visible selected state, and a completed
-answer therefore lights one pill in each group.
+`<input type="radio">`; the selected option additionally carries
+`bg-cube-action-selected` for a visible selected state, and an answer
+therefore lights exactly one pill.
 
 The radio itself is **visually hidden but not removed** — the pill's own
 border, fill and weight are the selected affordance, so the native dot stops
@@ -282,24 +300,22 @@ the element at its own coordinates, so the pill's whole area is the input's
 hit target. The keyboard focus ring moves from the dot to the pill
 (`:focus-visible`, on `outline` so it cannot widen the row).
 
-The two `(label, member)` tables — one per axis — are private statics in the
-code-behind, and their captions are this component's own UI text.
-`BgDataTypes_Lib` spells no display wording for either `CubeClaim` or
-`CubeAction`, so nothing here is a second spelling of a producer's label.
-Consolidating cube wording at the producer is the arc's standing charter
-question (see BgQuiz's `CubeActionDisplay`) and is a producer decision, not
-one to pre-empt from a consumer; if it lands, these tables lose their strings
-and keep their order.
+The one `(label, pair)` table is a private static in the code-behind, and
+its captions are this component's own UI text. `BgDataTypes_Lib` spells no
+display wording for `CubeClaim` or `CubeAction`, so nothing here is a second
+spelling of a producer's label. Consolidating cube wording at a label home is
+the arc's standing charter question (see BgQuiz's `CubeActionDisplay`) and is
+a producer decision, not one to pre-empt from a consumer; if it lands, the
+table loses its strings and keeps its order.
 
-The radio `name`s are generated per instance **and differ across the two
-axes** — same-name radios are mutually exclusive document-wide, so a shared
-name would make choosing a claim deselect the response, and a fixed name
-would cross-link two rows on one page. They are internal; consumers address
-the groups by `aria-label` or the `bg-cube-actions-group` class.
+The radio `name` is generated per instance — same-name radios are mutually
+exclusive document-wide, so a fixed name would cross-link two rows on one
+page. It is internal; consumers address the group by its `aria-label` or the
+`bg-cube-actions` class.
 
 `AdditionalAttributes` is splatted onto the root `bg-cube-actions` `div`.
-Consumers that style the row target `bg-cube-actions`; the groups are
-`bg-cube-actions-group` and the pills are `bg-cube-action`.
+Consumers that style the row target `bg-cube-actions`; the pills are
+`bg-cube-action`.
 
 **Sizing posture** (deliberate, documented intent): the pills are compact
 and inline-flow-friendly — the root is an inline-flex row that takes only
@@ -312,59 +328,50 @@ around it.
 The **horizontal** metrics are a measured contract, not free styling. This
 row is the widest element of the consuming quiz page's action row, and at
 its original metrics (0.75rem pill gap, 0.9rem pill inline padding, visible
-radio dot) the four compound pills totalled 561.6px — they out-widened the
-board and wrapped through the 641–1366px band, adding a line of chrome that
-cost board pixels wherever the board is height-bound. The compacted form
-(0.25rem pill gap, 0.45rem inline padding, hidden dot) took them to 396.0px,
-measured. The two-group split then spends one wider inter-group gap
-(0.75rem, the grouping's only visual signal — there are no visible group
-captions, deliberately: the accessible names ride `aria-label`, where they
-cost no pixels) and one extra pill's chrome, and buys back more than that in
-captions, five short ones running shorter than the four compound ones they
-replace. It is unconditional — no media query gates it, because a producer
-has no view of the consumer's layout to gate one on. Vertical metrics were
-deliberately left alone: 0.5rem block padding + 1.2 line-height is the
-pill's 37px height, which is the tap-target floor. Ruled in the umbrella's
-`SPEC-quiz-view.md` §2 (invariance floor), issue
-`halheinrich/backgammon#99`. Fine placement of the two groups is
-dogfooding-adjustable; the metrics above are not.
+radio dot) the original four compound pills totalled 561.6px — they
+out-widened the board and wrapped through the 641–1366px band, adding a line
+of chrome that cost board pixels wherever the board is height-bound. The
+compacted form (0.25rem pill gap, 0.45rem inline padding, hidden dot) took
+them to 396.0px, measured, and the two-group row to 364.8px. The four-pair
+row at the same constants measures, under the consumer's 16px
+Helvetica/Arial stack: pills of 136.2 / 113.9 / 116.0 / 131.1px, 509.2px in
+all with three 4px gaps (516.8px with the widest pill selected, since weight
+600 widens its caption), and 374.1px for the three pairs with Too Good
+withheld. That is wider than both earlier forms — the compound captions name
+both halves, which costs the width the five short captions had saved — and
+whether it still clears the consumer's row is the consumer's measurement to
+take; these numbers are its input. There is one gap, the compacted one: with
+one group there is no inter-group gap and no visible group caption
+(deliberately — the accessible name rides `aria-label`, where it costs no
+pixels). The form is unconditional — no media query gates it, because a
+producer has no view of the consumer's layout to gate one on. Vertical
+metrics were deliberately left alone: 0.5rem block padding + 1.2 line-height
+is the pill's 37px height, which is the tap-target floor. Ruled in the
+umbrella's `SPEC-quiz-view.md` §2 (invariance floor), issue
+`halheinrich/backgammon#99`.
 
 ### BackgammonCubeActions — value contract
 
-The component is **controlled on the pair and holds its own half-state**.
-`CubeClaimPair? Value` is the complete answer and nothing less: it is null
-until both groups have been answered. A half-chosen row has no
-`CubeClaimPair` to be, so the two half-selections are the component's own
-state — there is no half-shaped parameter to hold them, and inventing one
-would put a second answer shape on the public surface.
+The component is **strictly controlled**. `CubeClaimPair? Value` is the
+selected pair or null, and the row renders from it and nothing else — there
+is no component state, because one radio is one whole pair and no partial
+answer exists to hold. `ValueChanged` fires on every selection with the
+chosen pair; it never carries null, and there is no incomplete answer for it
+to fire on. The component never selects on its own, so a consumer that binds
+`ValueChanged` but never writes the pair back never adopts the answer — the
+selection snaps back to `Value` at its next render pass, its own answer
+field remaining the single source of truth. Clearing between problems is the
+consumer's move: set `Value` to null when advancing.
 
-The halves are otherwise **strictly subordinate** to `Value`: on every
-parameter pass, whenever `Value` disagrees with what the halves compose to,
-the parameter wins and the halves are re-seeded from it (both cleared when
-it is null). Agreement is the steady state, so this is a no-op on the
-ordinary path. The consequences are the ones the old strictly-controlled row
-had: clearing between problems is still the consumer's move (set `Value` to
-null when advancing), and a consumer that binds `ValueChanged` but never
-writes the pair back never adopts the answer — the selection snaps back at
-its next render pass, its own answer field remaining the single source of
-truth. A half-answered row composes to null, which is what such a consumer
-is still holding, so the two agree and the in-progress half survives an
-unrelated re-render.
+**Only the offered pairs can render as selected.** A `Value` outside them —
+`TooGoodTake` or `NoDoublePass`, which the type represents but no cube
+decision offers, or `TooGoodPass` while `OfferTooGood` is false — renders
+nothing selected. That is a caller bug surfacing, not a fallback: the row
+does not remap an unoffered pair onto a pill, and a consumer holding one has
+handed the row an answer the position cannot receive.
 
-**Each half moves independently.** Selecting in one group never
-auto-completes or disturbs the other. `ValueChanged` fires only when the
-answer changes: nothing fires for a half-answered row (it composes to null,
-which `Value` already is), and once both halves are set every subsequent
-change to either half re-fires with the recomposed pair. So the callback
-never carries null and never carries an incomplete answer, and the consumer
-always holds the latest complete one. Whether an incomplete row may be
-submitted is the **consumer's** gate — this component has no view of a
-submit affordance.
-
-Because each half comes from its own axis, the `CubeClaimPair` composed here
-always satisfies that type's half-guards — construction never throws in this
-component. The component emits the raw answer only; it does not encode which
-cell is correct. Scoring the pair against the position's derived truth claim
+The component emits the raw answer only; it does not encode which pair is
+correct. Scoring the pair against the position's derived truth
 (`DecisionData.BestClaimPair`) is the quiz layer's responsibility.
 
 ### Bounded-height contract — the board slot
@@ -415,36 +422,37 @@ cover the play-entry contract: legal-completion firing, illegal no-ops,
 post-completion no-ops, undo round-trip via replay, value-equality reset on
 `(Mop, Dice)` change, identity preservation on equal `(Mop, Dice)`,
 cube-decision rejection. `BackgammonCubeActionsTests` cover the cube-actions
-contract: render shape (two radio groups in claim-then-taker order, with
-their accessible names, 3 + 2 options, every caption), the uniform option
-set (all three claims offered in every state `Value` can be in — the
-"Too good is never withdrawn" ruling), splat surface, `Value` marks the
-matching pill in each group (parameterized over all six cells), clearing
-`Value` clears both halves (the consumer's advance-to-next-problem path),
-half-at-a-time entry (selecting one axis leaves the other untouched and
-fires nothing), every cell reachable in either entry order (two
-six-case parameterizations, each asserting one fire carrying the composed
-pair), the incoherent cell called out on its own, re-firing when either
-half of a complete answer changes, the controlled writeback round trip (the
-`@bind-Value` wiring, switching each half in turn), the subordination rule
-from both sides (halves re-seed from `Value` without a writeback; a
-half-answered row survives an unrelated re-render), distinct radio names
-across the two axes and across two rendered rows, and a grep-style pin that
-the retired composite surface is gone from the component source
-(`CubeDecisionPair`, the single option table, the compound captions) and
-from the rendered row. Five more cover the compacted pills. One is markup:
-the radios stay real focusable controls (no `hidden` / `aria-hidden` /
-`disabled` / `tabindex`). The other four read the scoped stylesheet as
-text, since bUnit has no CSS engine — the radio is hidden by the
-transparent-overlay technique rather than by `display: none`, a zeroed
-size, or `clip` (each asserted against); the pill keeps a
-`:focus-visible` outline; the compaction constants, the inter-group gap and
-the tap-target line-height hold, with no media query; and the selected pill
-keeps all three of its signals (border hue, fill, weight). The
-text-pinning technique is BgQuiz's (`MainLayoutTests`' narrow-desktop
-band); comments are stripped before matching — in the C# and Razor sources
-as well as the stylesheet — so prose naming a thing can neither satisfy nor
-fail an assertion about it.
+contract: render shape (one radio group with its accessible name, the root
+itself the group, four pills in the ruled order with their captions), the
+offerability gate from both sides (`OfferTooGood` false renders three pills
+with "Too good" absent; true offers it in every state `Value` can be in),
+nothing selected on a null `Value` in both offer states, splat surface,
+`Value` marks exactly the matching pill (parameterized over the four
+pairs), the two unoffered cells and a withheld Too Good answer rendering
+nothing selected (the caller-bug rule, pinned so no fallback creeps in),
+clearing `Value` (the consumer's advance-to-next-problem path), every pill
+firing once with its own pair (parameterized over four, and again over the
+three with Too Good withheld, so withholding shifts no index), re-firing on
+a changed selection, the controlled writeback round trip (the `@bind-Value`
+wiring), the strictly-controlled rule (a selection without a writeback
+follows `Value`), `[EditorRequired]` on both `ValueChanged` and
+`OfferTooGood` by reflection, one radio name across the row and distinct
+names across two rendered rows, and a grep-style pin that the retired
+two-axis surface is gone from the component source (the nested group, the
+per-axis accessible names and tables, the half-selection lifecycle,
+`CubeDecisionPair`) and from the rendered row. Five more cover the
+compacted pills. One is markup: the radios stay real focusable controls (no
+`hidden` / `aria-hidden` / `disabled` / `tabindex`), in both offer states.
+The other four read the scoped stylesheet as text, since bUnit has no CSS
+engine — the radio is hidden by the transparent-overlay technique rather
+than by `display: none`, a zeroed size, or `clip` (each asserted against);
+the pill keeps a `:focus-visible` outline; the compaction constants and the
+tap-target line-height hold on the one group, with no nested-group rule and
+no media query; and the selected pill keeps all three of its signals (border
+hue, fill, weight). The text-pinning technique is BgQuiz's
+(`MainLayoutTests`' narrow-desktop band); comments are stripped before
+matching — in the C# and Razor sources as well as the stylesheet — so prose
+naming a thing can neither satisfy nor fail an assertion about it.
 
 ## Public API
 
@@ -514,16 +522,18 @@ flow. See "Bounded-height contract" in Architecture and its Pitfalls.
 
 **Parameters:**
 
-- `CubeClaimPair? Value` — the complete answer, or null when the row holds
-  none: either nothing is selected or only one of the two halves is. The
-  component never selects on its own, and the half-selections it does hold
-  are re-seeded from this parameter whenever the two disagree. Set to null
-  to clear the row when advancing to a new problem.
+- `CubeClaimPair? Value` — the selected pair, or null when nothing is
+  selected. Strictly controlled: the component never selects on its own.
+  Set to null to clear the row when advancing to a new problem. A value
+  outside the offered pairs renders nothing selected and is a caller bug.
 - `EventCallback<CubeClaimPair?> ValueChanged` (**required**,
-  `[EditorRequired]`) — fires whenever a selection completes or changes the
-  answer, carrying the recomposed pair. Never carries null and never fires
-  for a half-answered row; once complete, every change to either half
-  re-fires (no one-shot lock). Pairs with `Value` for `@bind-Value`.
+  `[EditorRequired]`) — fires on every selection, carrying the chosen pair.
+  Never carries null; re-fires whenever the selection moves (no one-shot
+  lock). Pairs with `Value` for `@bind-Value`.
+- `bool OfferTooGood` (**required**, `[EditorRequired]`) — whether the
+  "Too good / Pass" pill is offered. Pass the producer's
+  `BgDecisionData.CanBeTooGood`; false renders the other three pairs only.
+  The component never derives the fact.
 - `Dictionary<string, object>? AdditionalAttributes` — splatted onto the
   root `div` (`bg-cube-actions`).
 
@@ -561,60 +571,52 @@ and surrounding spacing.
 
 ## BackgammonCubeActions — pitfalls
 
-- **`Value` is null while the row is half-answered — that is not "nothing
-  selected".** One selected pill is a real, visible, in-progress state that
-  no `CubeClaimPair` can express, so a consumer reading `Value == null` as
-  "the user has done nothing" will misread it. If a submit affordance needs
-  gating, gate it on `Value.HasValue` (which is exactly "both halves
-  answered"); if a "did they touch anything?" signal is ever wanted, it is
-  a new parameter, not an inference from this one.
+- **`Value == null` means nothing is selected — exactly that.** One radio is
+  one whole pair, so there is no half-answered state and no in-progress
+  selection the pair cannot express. If a submit affordance needs gating,
+  gate it on `Value.HasValue`.
 - **Submission gating is the consumer's, not the row's.** The component has
   no view of a submit button and does not withhold, warn, or nag about an
-  incomplete answer. It also does not withhold the incoherent
-  (No double, Pass) cell — six cells are selectable, by ruling.
-- **The halves are the component's own state, and stay subordinate to
-  `Value`.** A consumer that binds `ValueChanged` but never writes the pair
-  back into `Value` (or doesn't use `@bind-Value`) never adopts the answer:
-  the halves re-seed from `Value` on the next parameter pass and the
-  selection snaps back. The consumer's own answer field remains the single
-  source of truth. What the halves buy is only the in-progress state the
-  pair cannot hold; they can never quietly diverge from it.
+  unanswered row.
+- **Strictly controlled.** A consumer that binds `ValueChanged` but never
+  writes the pair back into `Value` (or doesn't use `@bind-Value`) never
+  adopts the answer: the selection snaps back to `Value` on the next render
+  pass. The consumer's own answer field remains the single source of truth.
 - **Clearing between problems is the consumer's job.** There is no request
   and no Mop-keyed reset here — set `Value` to null when advancing to the
   next problem, or the previous answer stays selected. (With `@bind-Value`,
-  null the bound field.) Clearing takes both halves, including a
-  half-answered row's single one.
-- **`ValueChanged` is `[EditorRequired]`.** Without it the row is inert
-  (see subordination above), and an out-of-date attribute name on a
-  Razor consumer would otherwise splat silently (Razor does not error on
-  unrecognized component attributes). RZ2012 surfaces the missing binding;
-  build with warnings-as-errors to make that a hard gate. `@bind-Value`
-  satisfies it.
-- **Fires only when the answer changes — never with null, never half-done.**
-  Selecting the first half fires nothing (there is no pair yet, and `Value`
-  is already null); completing the pair fires once; after that every change
-  to either half re-fires with the recomposed pair. There is no one-shot
-  lock, and radios cannot deselect, so the callback never carries null —
-  only the consumer setting `Value = null` clears the row. A consumer
-  wanting one-shot semantics advances to the next problem on the first
-  callback. Tests pin the silence, the fire-once, and the re-fire.
-- **Never cross-disable the axes.** (No double, Pass) is incoherent, and it
-  is selectable on purpose (SPEC-scoring §3): the answer is representable
-  and merely never best, and the review surface names it via
-  `CubeClaimPair.IsIncoherent`. Disabling it — or hiding "Too good" for
-  money positions, where it also occurs — would make the row prevent
-  answers instead of representing them, and would cost the quiz the very
-  mistake this shape exists to catch.
+  null the bound field.)
+- **`ValueChanged` and `OfferTooGood` are `[EditorRequired]`.** Without
+  the binding the row is inert, and without the fact a `bool` would default
+  to false and withhold Too Good from every position; an out-of-date
+  attribute name on a Razor consumer would otherwise splat silently either
+  way (Razor does not error on unrecognized component attributes). RZ2012
+  surfaces the omission; build with warnings-as-errors to make that a hard
+  gate. `@bind-Value` satisfies the first.
+- **Fires on every selection — never with null.** Radios cannot deselect,
+  so the callback never carries null — only the consumer setting
+  `Value = null` clears the row. There is no one-shot lock: a changed
+  selection re-fires. A consumer wanting one-shot semantics advances to the
+  next problem on the first callback.
+- **Never derive `OfferTooGood` here, and never withhold anything else.**
+  The offerability fact has one home (`BgDecisionData.CanBeTooGood`,
+  money-Jacoby-centred); restating it from rules fields in this component
+  would be a second derivation site. Pass the fact through. Conversely the
+  other three pairs are offered for every cube decision — nothing about a
+  row's state or a position withdraws them.
+- **An unoffered `Value` is a caller bug, not a fallback case.**
+  `TooGoodTake`, `NoDoublePass`, or `TooGoodPass` with `OfferTooGood` false
+  render nothing selected. Don't "help" by remapping such a value onto a
+  neighbouring pill; the tests pin that nothing lights.
 - **No play/cube routing guard.** The row takes no `DiagramRequest`, so it
   cannot reject a misrouted decision the way the old bundled wrapper did —
   the `Decision.IsCube` branch is entirely the consumer's responsibility
   (`BackgammonPlayEntry` still throws on cube decisions from its side).
-- **The radio group `name`s are internal, per-axis and instance-unique.**
-  Don't rely on them (they change per instance by design, so two rows on a
-  page never cross-link browser-native mutual exclusion, and the two axes
-  differ so a claim never deselects a response); select by the
-  `bg-cube-actions` / `bg-cube-actions-group` / `bg-cube-action` classes, or
-  by the groups' `aria-label`s, in tests and styling.
+- **The radio group `name` is internal and instance-unique.** Don't rely on
+  it (it changes per instance by design, so two rows on a page never
+  cross-link browser-native mutual exclusion); select by the
+  `bg-cube-actions` / `bg-cube-action` classes, or by the group's
+  `aria-label`, in tests and styling.
 - **Never hide the radio with `display: none`, `visibility: hidden`, a
   `hidden` attribute, or a zeroed size.** The dot is hidden by making the
   native control *transparent and stretched over its own pill*, precisely so

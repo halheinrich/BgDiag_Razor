@@ -1,18 +1,16 @@
-/* Cube-decision radio pills. Scoped to BackgammonCubeActions — styles the two
-   radio groups rendered by the .razor: the doubler's three-valued claim
-   (No double / Double / Too good) and the taker's response (Take / Pass).
-   Each option is a <label> wrapping its own <input type="radio"> + caption;
-   the input is visually hidden (see below), so the pill itself is the whole
-   visible affordance.
+/* Cube-decision radio pills. Scoped to BackgammonCubeActions — styles the one
+   radio group rendered by the .razor: the reachable cube verdicts as whole
+   pairs (No double / Take, Double / Take, Double / Pass, and Too good / Pass
+   when the position admits it). Each option is a <label> wrapping its own
+   <input type="radio"> + caption; the input is visually hidden (see below),
+   so the pill itself is the whole visible affordance.
 
-   The two-group shape is ruled by the umbrella's SPEC-scoring.md §3
-   (halheinrich/backgammon#86). Two nested flex rows, and the nesting is the
-   grouping's only visual signal: pills inside a group sit at the tight gap,
-   and the groups sit apart at a wider one, so the eye reads "claim" and
-   "response" as two rows of choices without a caption having to say so.
-   (Visible group captions were left out deliberately — they would re-spend
-   the width this row is measured against; the accessible names live on each
-   group's `aria-label`, where they cost no pixels.)
+   The four-pair shape is ruled by the umbrella's SPEC-scoring.md §3 as amended
+   2026-09-02 (halheinrich/backgammon#187). One flex row at one gap: there is
+   one group, so there is no inter-group spacing to signal and no nested row
+   to carry it. (A visible group caption was left out deliberately — it would
+   re-spend the width this row is measured against; the accessible name lives
+   on the root's `aria-label`, where it costs no pixels.)
 
    Sizing posture: compact and inline-flow-friendly by intent. The root is an
    inline-flex row that takes only its content size and carries no external
@@ -27,24 +25,13 @@
    metrics it out-widened the board and wrapped through the 641–1366px band,
    adding a chrome line that cost board pixels wherever the board is
    height-bound. Compacting them is the ruled resolution — umbrella
-   SPEC-quiz-view.md §2's invariance floor, halheinrich/backgammon#99. The one
-   inter-group gap this layout adds is bought back several times over by the
-   captions: five short ones (No double / Double / Too good / Take / Pass) run
-   shorter than the four compound ones they replace. The compact form is
-   unconditional: there is no media query here, because a producer component
-   has no view of the consumer's layout to gate one on. Re-widening any of the
-   three reopens the wrap; take a fresh measurement first. */
+   SPEC-quiz-view.md §2's invariance floor, halheinrich/backgammon#99. The
+   compact form is unconditional: there is no media query here, because a
+   producer component has no view of the consumer's layout to gate one on.
+   Re-widening any of the three reopens the wrap; take a fresh measurement
+   first. */
 
 .bg-cube-actions {
-    display: inline-flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.75rem;
-}
-
-/* One axis of the answer. The wider gap above separates the two of these; this
-   tighter one binds each group's own pills together. */
-.bg-cube-actions-group {
     display: inline-flex;
     flex-wrap: wrap;
     align-items: center;
@@ -107,7 +94,7 @@
 
 /* Keyboard focus, re-homed. The focus ring the browser used to draw around the
    dot is clipped away with it, so the pill takes over the job — otherwise a
-   keyboard user arrowing through a group would have no visible cursor. It
+   keyboard user arrowing through the group would have no visible cursor. It
    rides `outline`, which draws outside the border box and so cannot change the
    row's width; `:has()` is what lets the label style itself from its own
    input's state. `:focus-visible` (not `:focus`) keeps the ring off a plain
@@ -120,8 +107,7 @@
 /* Doubled class so the selected state outranks :hover (equal specificity, but
    this rule comes later) — a selected pill stays highlighted while hovered.
    With the dot gone these three co-varying signals — border hue, fill, and
-   weight — are the whole selected affordance; don't thin them to one. Both
-   groups use it: a completed answer shows one selected pill in each. */
+   weight — are the whole selected affordance; don't thin them to one. */
 .bg-cube-action.bg-cube-action-selected,
 .bg-cube-action.bg-cube-action-selected:hover {
     border-color: #2f6fed;

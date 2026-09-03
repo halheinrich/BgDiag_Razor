@@ -4,40 +4,41 @@ using BgDataTypes_Lib;
 namespace BgDiag_Razor.Components;
 
 /// <summary>
-/// Free-standing cube-decision answer row: two orthogonal radio groups whose
-/// cross-product is the answer — the doubler's three-valued
-/// <see cref="CubeClaim"/> claim ("No double" / "Double" / "Too good") and the
-/// taker's <see cref="CubeAction.Take"/> / <see cref="CubeAction.Pass"/>
-/// response if doubled. A complete selection is one
-/// <see cref="CubeClaimPair"/>, emitted via <see cref="ValueChanged"/>;
-/// scoring that answer against the position's derived truth is the consumer's
-/// (quiz layer's) job, not this component's.
+/// Free-standing cube-decision answer row: one radio group offering the
+/// reachable cube verdicts as whole <see cref="CubeClaimPair"/>s — "No double
+/// / Take", "Double / Take", "Double / Pass" and, when the position admits it,
+/// "Too good / Pass". One selection is one complete answer, emitted via
+/// <see cref="ValueChanged"/>; scoring that answer against the position's
+/// derived truth is the consumer's (quiz layer's) job, not this component's.
 ///
 /// <para>
-/// <b>Two axes, not four compound options.</b> The row was a single group of
-/// four compound pills over the action-level <c>CubeDecisionPair</c>, which
-/// could not express "too good to double, and they would still take" at all
-/// and reused its fourth pill for a claim its label did not name. The shape
-/// ruled by the umbrella's <c>SPEC-scoring.md</c> §3
-/// (<c>halheinrich/backgammon#86</c>) is the 3×2 of claim × taker, entered as
-/// two independent groups: the doubler half carries the <i>claim</i> about the
-/// position and the taker half the response <i>if doubled</i>, answered
-/// explicitly even when the claim is a no-double. The compound row's habit of
-/// silently asserting the taker half is what this removes.
+/// <b>Four pairs, one group.</b> The answer is still the (claim, taker) pair
+/// the umbrella's <c>SPEC-scoring.md</c> §3 models (halheinrich/backgammon#86):
+/// the doubler's <see cref="CubeClaim"/> about the position and the taker's
+/// <see cref="CubeAction.Take"/> / <see cref="CubeAction.Pass"/> response if
+/// doubled, scored per half. What the 2026-09-02 amendment
+/// (halheinrich/backgammon#187) changed is which pairs can be a verdict at
+/// all: Too Good now requires the pass, so the reachable verdict set is
+/// exactly four pairs, and the option set is those four — presented as
+/// compound pills whose captions name both halves, so nothing is asserted
+/// silently. The two cells the type still represents are not offered:
+/// <see cref="CubeClaimPair.TooGoodTake"/> is a retired verdict, and
+/// <see cref="CubeClaimPair.NoDoublePass"/> is the incoherent cell the
+/// amendment made moot. The pairs are the type's own canonical instances;
+/// this component composes none.
 /// </para>
 ///
 /// <para>
-/// <b>The option set is uniform and complete.</b> All three claims and both
-/// taker responses are offered for every cube decision, whatever rules are in
-/// force — "Too good" is never contextually withdrawn, because it genuinely
-/// occurs in money too, including under Jacoby via redoubles (SPEC-scoring §3,
-/// "Uniform availability"). All six cells are therefore selectable, the
-/// incoherent (<see cref="CubeClaim.NoDouble"/>,
-/// <see cref="CubeAction.Pass"/>) included: the axes are deliberately not
-/// cross-disabled, because choosing that cell reveals a misunderstanding a
-/// review surface can name (SPEC-scoring §3, "The incoherent cell is
-/// allowed"; <see cref="CubeClaimPair.IsIncoherent"/> names it). This row
-/// represents an answer; it never prevents one.
+/// <b>Too good is offered by fact, not derived here.</b> A money position
+/// under the Jacoby rule with a centred cube cannot be too good — gammons do
+/// not count until the cube turns, so the no-double equity never exceeds the
+/// cash — and the amendment rules the fourth pill withheld there. Whether a
+/// position admits the verdict is a fact about the position, derived once at
+/// the producer as <see cref="BgDecisionData.CanBeTooGood"/>; the consumer
+/// passes it through <see cref="OfferTooGood"/>, and this component never
+/// re-derives it from rules fields it does not see. Withholding is the only
+/// contextual change the row makes; the other three pairs are offered for
+/// every cube decision.
 /// </para>
 ///
 /// <para>
@@ -52,31 +53,15 @@ namespace BgDiag_Razor.Components;
 /// </para>
 ///
 /// <para>
-/// <b>Value contract: controlled on the pair, own state on the halves.</b>
-/// <see cref="Value"/> is the complete answer and nothing less — it is
-/// <c>null</c> until both halves are chosen. A half-chosen row has no
-/// <see cref="CubeClaimPair"/> to be, so the two half-selections are the
-/// component's own state; there is no half-shaped parameter to hold them and
-/// inventing one would put a second answer shape on the public surface. The
-/// halves are otherwise strictly subordinate to <see cref="Value"/>: whenever
-/// the parameter disagrees with what the halves compose to, the parameter
-/// wins and the halves are re-seeded from it (both cleared when it is
-/// <c>null</c>). So a consumer clears the row for the next problem exactly as
-/// before — set <see cref="Value"/> to <c>null</c> — and a consumer that
-/// ignores <see cref="ValueChanged"/> sees the selection snap back at its next
-/// render pass, the answer field it holds remaining the single source of truth.
-/// </para>
-///
-/// <para>
-/// <b>Each half moves independently.</b> Selecting in one group never
-/// auto-completes or disturbs the other: picking "Double" first leaves the
-/// taker half unanswered and <see cref="Value"/> <c>null</c>; the pair exists
-/// only once both groups have a selection. From then on every change to either
-/// half re-emits the recomposed pair, so the consumer always holds the latest
-/// complete answer. <see cref="ValueChanged"/> therefore never fires with
-/// <c>null</c> and never fires for an incomplete row. Whether an incomplete
-/// row may be submitted is the consumer's gate, not this component's — it has
-/// no view of a submit affordance.
+/// <b>Value contract: strictly controlled.</b> <see cref="Value"/> is the
+/// selected pair or <c>null</c>, and the row renders from it and nothing
+/// else — there is no component state, because a selection is a whole pair
+/// and no partial answer exists to hold. Every selection fires
+/// <see cref="ValueChanged"/> with the chosen pair; the component never
+/// selects on its own, so a consumer that ignores the callback sees its
+/// selection snap back to <see cref="Value"/> at the next render, its own
+/// answer field remaining the single source of truth. A consumer clears the
+/// row for the next problem by setting <see cref="Value"/> to <c>null</c>.
 /// </para>
 ///
 /// <para>
@@ -97,11 +82,8 @@ namespace BgDiag_Razor.Components;
 /// resolution, and it is unconditional: no media query gates it, because a
 /// producer component has no view of the consumer's layout to gate one on.
 /// Re-widening any of the three reopens the wrap, so take a fresh measurement
-/// first. The split into two groups spends one wider inter-group gap and buys
-/// back more than it spends: the five short captions total fewer characters
-/// than the four compound ones they replace. See the umbrella's
-/// <c>SPEC-quiz-view.md</c> §2 invariance floor and issue
-/// <c>halheinrich/backgammon#99</c>.
+/// first. See the umbrella's <c>SPEC-quiz-view.md</c> §2 invariance floor and
+/// issue halheinrich/backgammon#99.
 /// </para>
 ///
 /// <para>
@@ -112,9 +94,9 @@ namespace BgDiag_Razor.Components;
 /// tree, keeping the browser's native radio-group behavior (arrow-key roving,
 /// mutual exclusion by name) and the control's accessible name; the visible
 /// keyboard focus ring moves from the dot to the pill, and the pill's whole area
-/// becomes the input's own hit target. Consumers therefore still get real
-/// radio groups — what changed is what gets painted, not the semantics — and can
-/// still drive them by pointer, keyboard, or an automation harness.
+/// becomes the input's own hit target. Consumers therefore still get a real
+/// radio group — what changed is what gets painted, not the semantics — and can
+/// still drive it by pointer, keyboard, or an automation harness.
 ///
 /// <para>
 /// Restyling the input away with <c>display: none</c>, <c>visibility: hidden</c>
@@ -126,13 +108,12 @@ namespace BgDiag_Razor.Components;
 /// </para>
 ///
 /// <para>
-/// <b>Instance-unique radio groups.</b> The two groups carry distinct
-/// <c>name</c>s so a claim radio and a taker radio are never mutually exclusive
-/// with each other, and both names are generated per instance, so two rows on
-/// one page never cross-link their browser-native mutual exclusion either. The
-/// names are internal — consumers interact only through <see cref="Value"/> /
-/// <see cref="ValueChanged"/>, and address the groups by their
-/// <c>aria-label</c> or the <c>bg-cube-actions-group</c> class.
+/// <b>Instance-unique radio group name.</b> Browsers enforce radio mutual
+/// exclusion by <c>name</c> document-wide, so the name is generated per
+/// instance and two rows on one page never cross-link. It is internal —
+/// consumers interact only through <see cref="Value"/> /
+/// <see cref="ValueChanged"/>, and address the group by its
+/// <c>aria-label</c> or the <c>bg-cube-actions</c> class.
 /// </para>
 /// </summary>
 public partial class BackgammonCubeActions : ComponentBase
@@ -142,36 +123,64 @@ public partial class BackgammonCubeActions : ComponentBase
     // -----------------------------------------------------------------------
 
     /// <summary>
-    /// The currently selected answer, or <c>null</c> when the row holds no
-    /// complete answer — either nothing is selected or only one half is. The
-    /// component never selects on its own and never holds a pair the consumer
-    /// has not been told about: whenever this parameter disagrees with the two
-    /// half-selections, the parameter wins and the halves are re-seeded from
-    /// it. Set to <c>null</c> to clear the row when advancing to a new problem.
+    /// The currently selected answer, or <c>null</c> when nothing is selected.
+    /// The component renders strictly from this parameter: it never selects a
+    /// pill on its own, so a consumer that ignores <see cref="ValueChanged"/>
+    /// sees the selection snap back on the next render. Set to <c>null</c> to
+    /// clear the row when advancing to a new problem.
+    ///
+    /// <para>
+    /// Only the offered pairs can render as selected. A value outside them —
+    /// <see cref="CubeClaimPair.TooGoodTake"/> or
+    /// <see cref="CubeClaimPair.NoDoublePass"/>, which the type represents
+    /// but no cube decision offers, or <see cref="CubeClaimPair.TooGoodPass"/>
+    /// while <see cref="OfferTooGood"/> is <c>false</c> — renders nothing
+    /// selected. That is a caller bug surfacing, not a fallback: the row does
+    /// not remap an unoffered pair onto a pill, and a consumer holding one
+    /// has handed this row an answer the position cannot receive.
+    /// </para>
     /// </summary>
     [Parameter]
     public CubeClaimPair? Value { get; set; }
 
     /// <summary>
-    /// Fires whenever a selection completes or changes the answer, carrying the
-    /// recomposed <see cref="CubeClaimPair"/>. It never carries <c>null</c> and
-    /// never fires for a half-answered row: selecting the first half leaves the
-    /// answer incomplete (and <see cref="Value"/> already <c>null</c>), so
-    /// there is nothing to report; once both halves are set, every subsequent
-    /// change to either half re-fires with the updated pair. Pairs with
-    /// <see cref="Value"/> for <c>@bind-Value</c>.
+    /// Fires on every selection, carrying the chosen <see cref="CubeClaimPair"/>.
+    /// One radio is one whole pair, so the callback never carries <c>null</c>
+    /// and there is no incomplete answer for it to fire on. It re-fires
+    /// whenever the selection moves, so the consumer always holds the current
+    /// answer. Pairs with <see cref="Value"/> for <c>@bind-Value</c>.
     ///
     /// <para>
     /// Marked <see cref="EditorRequiredAttribute"/>: without this binding the
-    /// row's selections are never adopted (the halves re-seed from a
-    /// <see cref="Value"/> that never changes), and an out-of-date attribute
-    /// name on a Razor consumer would otherwise splat silently. RZ2012 surfaces
-    /// the missing binding at compile time; build with warnings-as-errors to
-    /// make that a hard gate.
+    /// row is inert (strictly controlled — see <see cref="Value"/>), and an
+    /// out-of-date attribute name on a Razor consumer would otherwise splat
+    /// silently. RZ2012 surfaces the missing binding at compile time; build
+    /// with warnings-as-errors to make that a hard gate.
     /// </para>
     /// </summary>
     [Parameter, EditorRequired]
     public EventCallback<CubeClaimPair?> ValueChanged { get; set; }
+
+    /// <summary>
+    /// Whether the position admits the Too Good verdict, and so whether the
+    /// "Too good / Pass" pill is offered. <c>false</c> renders the other three
+    /// pairs only. The consumer passes the producer's own fact —
+    /// <see cref="BgDecisionData.CanBeTooGood"/>, which is <c>false</c> exactly
+    /// for a money position under the Jacoby rule with a centred cube
+    /// (SPEC-scoring §3, 2026-09-02 amendment, halheinrich/backgammon#187) —
+    /// and this component never derives it: it has no view of the position's
+    /// rules and would only be restating a rule that has one home.
+    ///
+    /// <para>
+    /// Marked <see cref="EditorRequiredAttribute"/> because a forgotten
+    /// binding would be a silent splat with a wrong default either way: a
+    /// <c>bool</c> defaults to <c>false</c>, which would withhold Too Good
+    /// from every position. RZ2012 surfaces the omission at compile time;
+    /// build with warnings-as-errors to make that a hard gate.
+    /// </para>
+    /// </summary>
+    [Parameter, EditorRequired]
+    public bool OfferTooGood { get; set; }
 
     /// <summary>
     /// Catch-all for arbitrary HTML attributes (e.g. <c>style</c>, <c>id</c>,
@@ -181,117 +190,63 @@ public partial class BackgammonCubeActions : ComponentBase
     public Dictionary<string, object>? AdditionalAttributes { get; set; }
 
     // -----------------------------------------------------------------------
-    //  Internal tables — one per axis, each the single source for that group's
-    //  radios in render order. The claim table's order is CubeClaim's own
-    //  declaration order, which is the axis as SPEC-scoring §3 rules it
-    //  ({No Double, Double, Too Good}); the taker table's is Take before Pass.
+    //  Internal table — the single source for the radio options, in render
+    //  order: the four reachable verdicts of SPEC-scoring §3 as amended
+    //  2026-09-02 (halheinrich/backgammon#187), each mapped to the pair's own
+    //  canonical instance. The order walks the claim axis in CubeClaim's
+    //  declaration order and the taker axis Take-before-Pass within it, which
+    //  is also the verdict table's order in the spec.
     //
-    //  The captions are this component's own UI text. BgDataTypes_Lib spells no
-    //  display wording for either CubeClaim or CubeAction, so nothing here is a
-    //  second spelling of a producer's label; consolidating cube wording at the
-    //  producer is the standing charter question this arc's later legs settle
-    //  (see BgQuiz's CubeActionDisplay), and it is a producer decision, not one
-    //  to pre-empt from a consumer. If it lands, these tables lose their strings
-    //  and keep their order.
+    //  The captions are this component's own UI text. Each names both halves
+    //  in sentence case, joined by " / " with each half keeping its own
+    //  spelling (the halheinrich/backgammon#185 ruling), so the taker half is
+    //  never asserted silently the way the compound captions that predate
+    //  halheinrich/backgammon#86 did.
+    //  BgDataTypes_Lib spells no display wording for CubeClaim or CubeAction,
+    //  so nothing here is a second spelling of a producer's label;
+    //  consolidating cube wording at a label home is the arc's standing
+    //  charter question and a producer decision, not one to pre-empt from a
+    //  consumer. If it lands, this table loses its strings and keeps its
+    //  order.
     // -----------------------------------------------------------------------
 
-    private static readonly (string Label, CubeClaim Claim)[] _claimOptions =
+    private static readonly (string Label, CubeClaimPair Pair)[] _options =
     [
-        ("No double", CubeClaim.NoDouble),
-        ("Double",    CubeClaim.Double),
-        ("Too good",  CubeClaim.TooGood),
+        ("No double / Take", CubeClaimPair.NoDoubleTake),
+        ("Double / Take",    CubeClaimPair.DoubleTake),
+        ("Double / Pass",    CubeClaimPair.DoublePass),
+        ("Too good / Pass",  CubeClaimPair.TooGoodPass),
     ];
 
-    private static readonly (string Label, CubeAction Taker)[] _takerOptions =
-    [
-        ("Take", CubeAction.Take),
-        ("Pass", CubeAction.Pass),
-    ];
+    /// <summary>
+    /// The options this render offers, in table order: the whole table, or
+    /// the table without its Too Good pair when <see cref="OfferTooGood"/> is
+    /// <c>false</c>. The gate is on the claim, which is the axis the
+    /// offerability fact is about — a second Too Good pair would be withheld
+    /// with it, not by a positional slice.
+    /// </summary>
+    private IEnumerable<(string Label, CubeClaimPair Pair)> OfferedOptions =>
+        OfferTooGood
+            ? _options
+            : _options.Where(o => o.Pair.Claim != CubeClaim.TooGood);
 
     // -----------------------------------------------------------------------
-    //  Instance-unique radio group names — browsers enforce radio mutual
-    //  exclusion by name document-wide, so the two axes need different names
-    //  (or choosing a claim would deselect the taker) and both need an instance
-    //  suffix (or two rows on one page would cross-link).
+    //  Instance-unique radio group name — browsers enforce radio mutual
+    //  exclusion by name document-wide, so a hardcoded name would cross-link
+    //  two instances rendered on the same page.
     // -----------------------------------------------------------------------
 
-    private readonly string _claimGroupName = $"bg-cube-claim-{Guid.NewGuid():N}";
-    private readonly string _takerGroupName = $"bg-cube-taker-{Guid.NewGuid():N}";
+    private readonly string _groupName = $"bg-cube-actions-{Guid.NewGuid():N}";
 
     // -----------------------------------------------------------------------
-    //  Half-selection state
-    //
-    //  The two halves chosen so far, each null until its group is answered.
-    //  This is the component's own state only because a half-answered row has
-    //  no CubeClaimPair to be — see the value contract in the type doc. It is
-    //  re-seeded from Value on every parameter pass that disagrees with it, so
-    //  it can never quietly diverge from the consumer's answer field.
+    //  Radio selection routing
     // -----------------------------------------------------------------------
-
-    private CubeClaim? _claim;
-    private CubeAction? _taker;
 
     /// <summary>
-    /// What the two half-selections currently compose to: the complete
-    /// <see cref="CubeClaimPair"/> once both are set, otherwise <c>null</c>.
-    /// Each half comes from its own axis, so the pair built here always
-    /// satisfies <see cref="CubeClaimPair"/>'s half-guards — construction never
-    /// throws in this component.
+    /// Emits the selected option's <see cref="CubeClaimPair"/>. No state is
+    /// recorded here — the selection renders only once the consumer writes it
+    /// back into <see cref="Value"/> (strictly controlled).
     /// </summary>
-    private CubeClaimPair? Composed =>
-        _claim is { } claim && _taker is { } taker
-            ? new CubeClaimPair(claim, taker)
-            : null;
-
-    /// <summary>
-    /// Re-seeds the halves from <see cref="Value"/> whenever the two disagree —
-    /// the whole of the subordination rule. Agreement is the steady state (the
-    /// consumer wrote back the pair just emitted), so this is a no-op on the
-    /// ordinary path; disagreement means either the consumer moved the value (a
-    /// clear between problems, or an externally set answer) or it declined the
-    /// one just emitted, and both resolve the same way: the parameter wins. A
-    /// half-answered row composes to <c>null</c> and so sits undisturbed under
-    /// a <c>null</c> <see cref="Value"/>, which is what lets the first half
-    /// survive until the second is chosen.
-    /// </summary>
-    protected override void OnParametersSet()
-    {
-        if (Value != Composed)
-        {
-            _claim = Value?.Claim;
-            _taker = Value?.Taker;
-        }
-    }
-
-    // -----------------------------------------------------------------------
-    //  Radio selection routing — one handler per axis, both recomposing.
-    // -----------------------------------------------------------------------
-
-    /// <summary>Records the doubler-half claim and reports the recomposed answer.</summary>
-    private Task HandleClaimSelected(CubeClaim claim)
-    {
-        _claim = claim;
-        return EmitIfAnswerChanged();
-    }
-
-    /// <summary>Records the taker-half response and reports the recomposed answer.</summary>
-    private Task HandleTakerSelected(CubeAction taker)
-    {
-        _taker = taker;
-        return EmitIfAnswerChanged();
-    }
-
-    /// <summary>
-    /// Reports the recomposed answer, and only when it is news. A first-half
-    /// selection composes to <c>null</c> while <see cref="Value"/> is already
-    /// <c>null</c>, so nothing fires for an incomplete row; re-selecting the
-    /// half already chosen likewise changes nothing. No selection is recorded
-    /// as an answer here — it becomes one only once the consumer writes the
-    /// pair back into <see cref="Value"/>.
-    /// </summary>
-    private Task EmitIfAnswerChanged()
-    {
-        var composed = Composed;
-        return composed == Value ? Task.CompletedTask : ValueChanged.InvokeAsync(composed);
-    }
+    private Task HandleSelected(CubeClaimPair pair) =>
+        ValueChanged.InvokeAsync(pair);
 }
