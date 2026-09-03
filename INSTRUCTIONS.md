@@ -99,8 +99,8 @@ clicked a complete legal sequence. Handles play decisions only
 
 `BackgammonCubeActions` is the **free-standing cube answer row** — one radio
 group offering the reachable cube verdicts as whole `CubeClaimPair`s (No
-double / Take, Double / Take, Double / Pass, and Too good / Pass when the
-position admits it), with a controlled `Value` / `ValueChanged` contract
+double, Double / Take, Double / Pass, and Too good when the position admits
+it), with a controlled `Value` / `ValueChanged` contract
 (`@bind-Value` capable) and a required `OfferTooGood` fact the consumer reads
 from the producer. It renders no board and takes no `DiagramRequest`:
 a cube decision has no click-by-click board state, so — unlike the play
@@ -256,19 +256,21 @@ those four. `BackgammonCubeActions` renders one `bg-cube-actions` root that
 is itself the `role="radiogroup"` (`aria-label="Cube decision"`), holding
 the pills in this order:
 
-- **No double / Take** — `CubeClaimPair.NoDoubleTake`
+- **No double** — `CubeClaimPair.NoDoubleTake`
 - **Double / Take** — `CubeClaimPair.DoubleTake`
 - **Double / Pass** — `CubeClaimPair.DoublePass`
-- **Too good / Pass** — `CubeClaimPair.TooGoodPass`, rendered only when
+- **Too good** — `CubeClaimPair.TooGoodPass`, rendered only when
   `OfferTooGood` is true
 
 The order walks the claim axis in `CubeClaim`'s declaration order and the
 taker axis Take-before-Pass within it, which is also the spec's verdict-table
-order. Each caption names both halves in sentence case, joined by " / " with
-each half keeping its own spelling (the `halheinrich/backgammon#185`
-ruling), so the taker half is never asserted silently the way the original
-compound captions did. Each pill submits the pair's own canonical instance;
-the component composes no pair of its own.
+order. The captions follow the amended pair-label ruling on
+`halheinrich/backgammon#185`: a pair reads as its claim alone when that
+claim has exactly one reachable pair, else as claim and response joined by
+" / " in sentence case. So the implied half is omitted — No double implies
+Take and Too good implies Pass under the amendment — and only Double spells
+its response. Each pill submits the pair's own canonical instance; the
+component composes no pair of its own.
 
 **Two cells are not offered.** `CubeClaimPair` still represents the closed
 3×2, but `TooGoodTake` is a verdict the amendment retired and `NoDoublePass`
@@ -334,13 +336,14 @@ of chrome that cost board pixels wherever the board is height-bound. The
 compacted form (0.25rem pill gap, 0.45rem inline padding, hidden dot) took
 them to 396.0px, measured, and the two-group row to 364.8px. The four-pair
 row at the same constants measures, under the consumer's 16px
-Helvetica/Arial stack: pills of 136.2 / 113.9 / 116.0 / 131.1px, 509.2px in
-all with three 4px gaps (516.8px with the widest pill selected, since weight
-600 widens its caption), and 374.1px for the three pairs with Too Good
-withheld. That is wider than both earlier forms — the compound captions name
-both halves, which costs the width the five short captions had saved — and
-whether it still clears the consumer's row is the consumer's measurement to
-take; these numbers are its input. There is one gap, the compacted one: with
+Helvetica/Arial stack: pills of 89.3 / 113.9 / 116.0 / 82.2px, 413.5px in
+all with three 4px gaps (418.8px with the widest pill, Double / Pass,
+selected, and 419.3px at most over any selection, since weight 600 widens
+the selected caption), and 327.2px for the three pairs with Too Good
+withheld. The implied-half captions are what keep it there: spelling both
+halves on every pill measured 509.2px. Whether the row clears the
+consumer's one-line contract is the consumer's measurement to take; these
+numbers are its input. There is one gap, the compacted one: with
 one group there is no inter-group gap and no visible group caption
 (deliberately — the accessible name rides `aria-label`, where it costs no
 pixels). The form is unconditional — no media query gates it, because a
@@ -531,7 +534,7 @@ flow. See "Bounded-height contract" in Architecture and its Pitfalls.
   Never carries null; re-fires whenever the selection moves (no one-shot
   lock). Pairs with `Value` for `@bind-Value`.
 - `bool OfferTooGood` (**required**, `[EditorRequired]`) — whether the
-  "Too good / Pass" pill is offered. Pass the producer's
+  "Too good" pill is offered. Pass the producer's
   `BgDecisionData.CanBeTooGood`; false renders the other three pairs only.
   The component never derives the fact.
 - `Dictionary<string, object>? AdditionalAttributes` — splatted onto the

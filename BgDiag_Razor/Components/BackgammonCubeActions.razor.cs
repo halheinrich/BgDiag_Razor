@@ -5,9 +5,9 @@ namespace BgDiag_Razor.Components;
 
 /// <summary>
 /// Free-standing cube-decision answer row: one radio group offering the
-/// reachable cube verdicts as whole <see cref="CubeClaimPair"/>s — "No double
-/// / Take", "Double / Take", "Double / Pass" and, when the position admits it,
-/// "Too good / Pass". One selection is one complete answer, emitted via
+/// reachable cube verdicts as whole <see cref="CubeClaimPair"/>s — "No
+/// double", "Double / Take", "Double / Pass" and, when the position admits it,
+/// "Too good". One selection is one complete answer, emitted via
 /// <see cref="ValueChanged"/>; scoring that answer against the position's
 /// derived truth is the consumer's (quiz layer's) job, not this component's.
 ///
@@ -163,7 +163,7 @@ public partial class BackgammonCubeActions : ComponentBase
 
     /// <summary>
     /// Whether the position admits the Too Good verdict, and so whether the
-    /// "Too good / Pass" pill is offered. <c>false</c> renders the other three
+    /// "Too good" pill is offered. <c>false</c> renders the other three
     /// pairs only. The consumer passes the producer's own fact —
     /// <see cref="BgDecisionData.CanBeTooGood"/>, which is <c>false</c> exactly
     /// for a money position under the Jacoby rule with a centred cube
@@ -197,25 +197,24 @@ public partial class BackgammonCubeActions : ComponentBase
     //  declaration order and the taker axis Take-before-Pass within it, which
     //  is also the verdict table's order in the spec.
     //
-    //  The captions are this component's own UI text. Each names both halves
-    //  in sentence case, joined by " / " with each half keeping its own
-    //  spelling (the halheinrich/backgammon#185 ruling), so the taker half is
-    //  never asserted silently the way the compound captions that predate
-    //  halheinrich/backgammon#86 did.
-    //  BgDataTypes_Lib spells no display wording for CubeClaim or CubeAction,
-    //  so nothing here is a second spelling of a producer's label;
-    //  consolidating cube wording at a label home is the arc's standing
-    //  charter question and a producer decision, not one to pre-empt from a
-    //  consumer. If it lands, this table loses its strings and keeps its
-    //  order.
+    //  The captions are this component's own UI text, spelled by the amended
+    //  pair-label ruling on halheinrich/backgammon#185: a pair reads as its
+    //  claim alone when that claim has exactly one reachable pair, else as
+    //  claim and response joined by " / " in sentence case — so the implied
+    //  half is omitted, because No double implies Take and Too good implies
+    //  Pass under SPEC-scoring §3's 2026-09-02 amendment, while Double needs
+    //  its response spelled. BgDataTypes_Lib spells no display wording for
+    //  CubeClaim or CubeAction, so nothing here is a second spelling of a
+    //  producer's label; a future label home re-sources these strings, and
+    //  this table then loses them and keeps its order.
     // -----------------------------------------------------------------------
 
     private static readonly (string Label, CubeClaimPair Pair)[] _options =
     [
-        ("No double / Take", CubeClaimPair.NoDoubleTake),
-        ("Double / Take",    CubeClaimPair.DoubleTake),
-        ("Double / Pass",    CubeClaimPair.DoublePass),
-        ("Too good / Pass",  CubeClaimPair.TooGoodPass),
+        ("No double",     CubeClaimPair.NoDoubleTake),
+        ("Double / Take", CubeClaimPair.DoubleTake),
+        ("Double / Pass", CubeClaimPair.DoublePass),
+        ("Too good",      CubeClaimPair.TooGoodPass),
     ];
 
     /// <summary>

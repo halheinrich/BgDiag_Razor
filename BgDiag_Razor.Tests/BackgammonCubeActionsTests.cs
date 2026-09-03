@@ -16,15 +16,18 @@ public class BackgammonCubeActionsTests : BunitContext
     //  SPEC-scoring.md §3 as amended 2026-09-02 (halheinrich/backgammon#187),
     //  walking the claim axis in CubeClaim's declaration order and the taker
     //  axis Take-before-Pass within it. The first three are offered for every
-    //  cube decision; the fourth only when the position admits Too Good.
+    //  cube decision; the fourth only when the position admits Too Good. The
+    //  captions follow the amended halheinrich/backgammon#185 ruling: a claim
+    //  with exactly one reachable pair reads alone (No double implies Take,
+    //  Too good implies Pass), and only Double spells its response.
     // -----------------------------------------------------------------------
 
     private static readonly (string Label, CubeClaimPair Pair)[] Options =
     [
-        ("No double / Take", CubeClaimPair.NoDoubleTake),
-        ("Double / Take",    CubeClaimPair.DoubleTake),
-        ("Double / Pass",    CubeClaimPair.DoublePass),
-        ("Too good / Pass",  CubeClaimPair.TooGoodPass),
+        ("No double",     CubeClaimPair.NoDoubleTake),
+        ("Double / Take", CubeClaimPair.DoubleTake),
+        ("Double / Pass", CubeClaimPair.DoublePass),
+        ("Too good",      CubeClaimPair.TooGoodPass),
     ];
 
     private static readonly IReadOnlyList<string> AllLabels =
@@ -307,7 +310,7 @@ public class BackgammonCubeActionsTests : BunitContext
         Assert.Equal(CubeClaimPair.TooGoodPass, current);
 
         cut.Render(p => p.Add(c => c.Value, current));
-        Assert.Equal(["Too good / Pass"], SelectedLabels(cut));
+        Assert.Equal(["Too good"], SelectedLabels(cut));
     }
 
     /// <summary>
@@ -531,19 +534,21 @@ public class BackgammonCubeActionsTests : BunitContext
     /// pill's inline padding (0.9rem → 0.45rem) and the hidden dot (13px
     /// control + its 0.5rem caption gap) were the −165.6px that closed it,
     /// and all three stand here. The four-pair row at these constants
-    /// measures 136.2 + 113.9 + 116.0 + 131.1 = 497.2px of pills plus three
-    /// 4px gaps: 509.2px unselected, 516.8px with the widest pill selected
-    /// (weight 600 widens its caption), and 374.1px for the three pairs with
+    /// measures 89.3 + 113.9 + 116.0 + 82.2 = 401.4px of pills plus three
+    /// 4px gaps: 413.5px unselected, 418.8px with the widest pill (Double /
+    /// Pass) selected and 419.3px at most over any selection (weight 600
+    /// widens the selected caption), and 327.2px for the three pairs with
     /// Too Good withheld — under the consumer's 16px Helvetica/Arial stack.
-    /// That is wider than the two-group row it replaces (364.8px) and than
-    /// the compacted compound row before that (396.0px): the compound
-    /// captions name both halves, which costs the width the five short
-    /// captions had saved. Whether 509px still clears the consumer's row is
-    /// the consumer's measurement to take; these numbers are its input. With
-    /// one group there is one gap, the compacted one: the wider inter-group
-    /// gap went with the second group. bUnit cannot evaluate any of that;
-    /// what it can do is stop the constants being widened back without a
-    /// fresh measurement.
+    /// The implied-half captions (halheinrich/backgammon#185, amended) buy
+    /// back most of what fully compound ones spent (509.2px), but the row is
+    /// still wider than the two-group row it replaces (364.8px) and the
+    /// compacted compound row before that (396.0px). Whether it clears the
+    /// consumer's row is the consumer's measurement to take; these numbers
+    /// are its input. With one
+    /// group there is one gap, the compacted one: the wider inter-group gap
+    /// went with the second group. bUnit cannot evaluate any of that; what
+    /// it can do is stop the constants being widened back without a fresh
+    /// measurement.
     ///
     /// <para>
     /// The <i>vertical</i> metrics are pinned in the same breath because they

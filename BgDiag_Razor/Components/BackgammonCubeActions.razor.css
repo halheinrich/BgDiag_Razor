@@ -1,7 +1,7 @@
 /* Cube-decision radio pills. Scoped to BackgammonCubeActions — styles the one
    radio group rendered by the .razor: the reachable cube verdicts as whole
-   pairs (No double / Take, Double / Take, Double / Pass, and Too good / Pass
-   when the position admits it). Each option is a <label> wrapping its own
+   pairs (No double, Double / Take, Double / Pass, and Too good when the
+   position admits it). Each option is a <label> wrapping its own
    <input type="radio"> + caption; the input is visually hidden (see below),
    so the pill itself is the whole visible affordance.
 
