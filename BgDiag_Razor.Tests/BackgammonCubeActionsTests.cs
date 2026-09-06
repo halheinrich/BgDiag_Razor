@@ -16,10 +16,18 @@ public class BackgammonCubeActionsTests : BunitContext
     //  SPEC-scoring.md §3 as amended 2026-09-02 (halheinrich/backgammon#187),
     //  walking the claim axis in CubeClaim's declaration order and the taker
     //  axis Take-before-Pass within it. The first three are offered for every
-    //  cube decision; the fourth only when the position admits Too Good. The
-    //  captions follow the amended halheinrich/backgammon#185 ruling: a claim
-    //  with exactly one reachable pair reads alone (No double implies Take,
-    //  Too good implies Pass), and only Double spells its response.
+    //  cube decision; the fourth only when the position admits Too Good.
+    //
+    //  The captions below are literals deliberately, and stay literals. The
+    //  component spells none of them any more — each pill renders
+    //  CubeLabels.Label(CubeClaimPair) from BackgammonDiagram_Lib, which is
+    //  where the wording and its claim-alone rule are ruled and where that
+    //  rule's own suite (CubeLabelsTests) proves it. These are a consumer's
+    //  pins: they say what a user reads off this row, so a re-wording at the
+    //  label home has to arrive here as a deliberate edit instead of passing
+    //  through unseen. Re-sourcing them from CubeLabels would turn every
+    //  caption assertion into Label(pair) == Label(pair) and pin nothing —
+    //  so do not "de-duplicate" this table against the label home.
     // -----------------------------------------------------------------------
 
     private static readonly (string Label, CubeClaimPair Pair)[] Options =

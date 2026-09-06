@@ -1,13 +1,15 @@
 using Microsoft.AspNetCore.Components;
+using BackgammonDiagram_Lib;
 using BgDataTypes_Lib;
 
 namespace BgDiag_Razor.Components;
 
 /// <summary>
 /// Free-standing cube-decision answer row: one radio group offering the
-/// reachable cube verdicts as whole <see cref="CubeClaimPair"/>s — "No
-/// double", "Double / Take", "Double / Pass" and, when the position admits it,
-/// "Too good". One selection is one complete answer, emitted via
+/// reachable cube verdicts as whole <see cref="CubeClaimPair"/>s — three for
+/// every cube decision and a fourth when the position admits it — each pill
+/// captioned by the label home, <see cref="CubeLabels.Label(CubeClaimPair)"/>.
+/// One selection is one complete answer, emitted via
 /// <see cref="ValueChanged"/>; scoring that answer against the position's
 /// derived truth is the consumer's (quiz layer's) job, not this component's.
 ///
@@ -19,13 +21,22 @@ namespace BgDiag_Razor.Components;
 /// doubled, scored per half. What the 2026-09-02 amendment
 /// (halheinrich/backgammon#187) changed is which pairs can be a verdict at
 /// all: Too Good now requires the pass, so the reachable verdict set is
-/// exactly four pairs, and the option set is those four — presented as
-/// compound pills whose captions name both halves, so nothing is asserted
-/// silently. The two cells the type still represents are not offered:
+/// exactly four pairs, and the option set is those four. The two cells the
+/// type still represents are not offered:
 /// <see cref="CubeClaimPair.TooGoodTake"/> is a retired verdict, and
 /// <see cref="CubeClaimPair.NoDoublePass"/> is the incoherent cell the
 /// amendment made moot. The pairs are the type's own canonical instances;
 /// this component composes none.
+/// </para>
+///
+/// <para>
+/// <b>The captions are not spelled here.</b> Each pill reads
+/// <see cref="CubeLabels.Label(CubeClaimPair)"/>, the one public spelling of
+/// a cube answer, in the sentence case and claim-alone form ruled on
+/// halheinrich/backgammon#185. This component holds no cube wording of its
+/// own: its option table carries the pairs and their order and nothing else,
+/// so a re-wording at that home reaches this row with no edit to it, and
+/// there is no second spelling here to drift from the first.
 /// </para>
 ///
 /// <para>
@@ -162,9 +173,10 @@ public partial class BackgammonCubeActions : ComponentBase
     public EventCallback<CubeClaimPair?> ValueChanged { get; set; }
 
     /// <summary>
-    /// Whether the position admits the Too Good verdict, and so whether the
-    /// "Too good" pill is offered. <c>false</c> renders the other three
-    /// pairs only. The consumer passes the producer's own fact —
+    /// Whether the position admits the Too Good verdict, and so whether its
+    /// pill — <see cref="CubeClaimPair.TooGoodPass"/> — is offered.
+    /// <c>false</c> renders the other three pairs only. The consumer passes
+    /// the producer's own fact —
     /// <see cref="BgDecisionData.CanBeTooGood"/>, which is <c>false</c> exactly
     /// for a money position under the Jacoby rule with a centred cube
     /// (SPEC-scoring §3, 2026-09-02 amendment, halheinrich/backgammon#187) —
@@ -192,29 +204,22 @@ public partial class BackgammonCubeActions : ComponentBase
     // -----------------------------------------------------------------------
     //  Internal table — the single source for the radio options, in render
     //  order: the four reachable verdicts of SPEC-scoring §3 as amended
-    //  2026-09-02 (halheinrich/backgammon#187), each mapped to the pair's own
-    //  canonical instance. The order walks the claim axis in CubeClaim's
-    //  declaration order and the taker axis Take-before-Pass within it, which
-    //  is also the verdict table's order in the spec.
+    //  2026-09-02 (halheinrich/backgammon#187), each the pair's own canonical
+    //  instance. The order walks the claim axis in CubeClaim's declaration
+    //  order and the taker axis Take-before-Pass within it, which is also the
+    //  verdict table's order in the spec.
     //
-    //  The captions are this component's own UI text, spelled by the amended
-    //  pair-label ruling on halheinrich/backgammon#185: a pair reads as its
-    //  claim alone when that claim has exactly one reachable pair, else as
-    //  claim and response joined by " / " in sentence case — so the implied
-    //  half is omitted, because No double implies Take and Too good implies
-    //  Pass under SPEC-scoring §3's 2026-09-02 amendment, while Double needs
-    //  its response spelled. BgDataTypes_Lib spells no display wording for
-    //  CubeClaim or CubeAction, so nothing here is a second spelling of a
-    //  producer's label; a future label home re-sources these strings, and
-    //  this table then loses them and keeps its order.
+    //  Order and identity, and nothing else: the wording of a cube answer has
+    //  one home — CubeLabels.Label in BackgammonDiagram_Lib
+    //  (halheinrich/backgammon#185) — and the markup asks it per pill.
     // -----------------------------------------------------------------------
 
-    private static readonly (string Label, CubeClaimPair Pair)[] _options =
+    private static readonly CubeClaimPair[] _options =
     [
-        ("No double",     CubeClaimPair.NoDoubleTake),
-        ("Double / Take", CubeClaimPair.DoubleTake),
-        ("Double / Pass", CubeClaimPair.DoublePass),
-        ("Too good",      CubeClaimPair.TooGoodPass),
+        CubeClaimPair.NoDoubleTake,
+        CubeClaimPair.DoubleTake,
+        CubeClaimPair.DoublePass,
+        CubeClaimPair.TooGoodPass,
     ];
 
     /// <summary>
@@ -224,10 +229,10 @@ public partial class BackgammonCubeActions : ComponentBase
     /// offerability fact is about — a second Too Good pair would be withheld
     /// with it, not by a positional slice.
     /// </summary>
-    private IEnumerable<(string Label, CubeClaimPair Pair)> OfferedOptions =>
+    private IEnumerable<CubeClaimPair> OfferedOptions =>
         OfferTooGood
             ? _options
-            : _options.Where(o => o.Pair.Claim != CubeClaim.TooGood);
+            : _options.Where(pair => pair.Claim != CubeClaim.TooGood);
 
     // -----------------------------------------------------------------------
     //  Instance-unique radio group name — browsers enforce radio mutual

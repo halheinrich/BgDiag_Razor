@@ -20,8 +20,10 @@ https://github.com/halheinrich/BgDiag_Razor — branch `main`.
 ## Depends on
 
 - **BackgammonDiagram_Lib** — `DiagramRequest`, `DiagramOptions`,
-  `DiagramRenderer`, `BoardHitRegions`, `SvgViewBox`, `HitRect`. Referenced
-  as a project reference, not a package.
+  `DiagramRenderer`, `BoardHitRegions`, `SvgViewBox`, `HitRect`, and
+  `CubeLabels`, the one spelling of a cube answer — `BackgammonCubeActions`
+  captions every pill through it. Referenced as a project reference, not a
+  package.
 - **BgDataTypes_Lib** — `BoardState` (class), `Play` (struct), `Move`
   (readonly record struct), `CubeOwner` (enum), `CubeAction` (enum),
   `CubeClaim` (enum), `CubeClaimPair` (readonly record struct). Move
@@ -98,9 +100,9 @@ clicked a complete legal sequence. Handles play decisions only
 (`Decision.IsCube == false`); cube decisions throw at the contract boundary.
 
 `BackgammonCubeActions` is the **free-standing cube answer row** — one radio
-group offering the reachable cube verdicts as whole `CubeClaimPair`s (No
-double, Double / Take, Double / Pass, and Too good when the position admits
-it), with a controlled `Value` / `ValueChanged` contract
+group offering the reachable cube verdicts as whole `CubeClaimPair`s (three
+for every cube decision, a fourth when the position admits it), with a
+controlled `Value` / `ValueChanged` contract
 (`@bind-Value` capable) and a required `OfferTooGood` fact the consumer reads
 from the producer. It renders no board and takes no `DiagramRequest`:
 a cube decision has no click-by-click board state, so — unlike the play
@@ -256,21 +258,22 @@ those four. `BackgammonCubeActions` renders one `bg-cube-actions` root that
 is itself the `role="radiogroup"` (`aria-label="Cube decision"`), holding
 the pills in this order:
 
-- **No double** — `CubeClaimPair.NoDoubleTake`
-- **Double / Take** — `CubeClaimPair.DoubleTake`
-- **Double / Pass** — `CubeClaimPair.DoublePass`
-- **Too good** — `CubeClaimPair.TooGoodPass`, rendered only when
-  `OfferTooGood` is true
+1. `CubeClaimPair.NoDoubleTake`
+2. `CubeClaimPair.DoubleTake`
+3. `CubeClaimPair.DoublePass`
+4. `CubeClaimPair.TooGoodPass`, rendered only when `OfferTooGood` is true
 
 The order walks the claim axis in `CubeClaim`'s declaration order and the
 taker axis Take-before-Pass within it, which is also the spec's verdict-table
-order. The captions follow the amended pair-label ruling on
-`halheinrich/backgammon#185`: a pair reads as its claim alone when that
-claim has exactly one reachable pair, else as claim and response joined by
-" / " in sentence case. So the implied half is omitted — No double implies
-Take and Too good implies Pass under the amendment — and only Double spells
-its response. Each pill submits the pair's own canonical instance; the
-component composes no pair of its own.
+order. Each pill submits the pair's own canonical instance; the component
+composes no pair of its own.
+
+**The captions come from the label home.** Each pill is captioned by
+`CubeLabels.Label(CubeClaimPair)` in BackgammonDiagram_Lib — the one public
+spelling of a cube answer, in the sentence case and claim-alone form ruled on
+`halheinrich/backgammon#185`. `BackgammonCubeActions` spells no cube wording
+of its own, so a re-wording at that home reaches this row without an edit to
+it, and there is no second spelling here to drift from the first.
 
 **Two cells are not offered.** `CubeClaimPair` still represents the closed
 3×2, but `TooGoodTake` is a verdict the amendment retired and `NoDoublePass`
@@ -302,13 +305,9 @@ the element at its own coordinates, so the pill's whole area is the input's
 hit target. The keyboard focus ring moves from the dot to the pill
 (`:focus-visible`, on `outline` so it cannot widen the row).
 
-The one `(label, pair)` table is a private static in the code-behind, and
-its captions are this component's own UI text. `BgDataTypes_Lib` spells no
-display wording for `CubeClaim` or `CubeAction`, so nothing here is a second
-spelling of a producer's label. Consolidating cube wording at a label home is
-the arc's standing charter question (see BgQuiz's `CubeActionDisplay`) and is
-a producer decision, not one to pre-empt from a consumer; if it lands, the
-table loses its strings and keeps its order.
+The one option table is a private static in the code-behind, holding the four
+pairs in render order and nothing else. No cube caption is spelled anywhere in
+this repo's component code; the markup asks `CubeLabels` per pill.
 
 The radio `name` is generated per instance — same-name radios are mutually
 exclusive document-wide, so a fixed name would cross-link two rows on one
@@ -337,13 +336,13 @@ compacted form (0.25rem pill gap, 0.45rem inline padding, hidden dot) took
 them to 396.0px, measured, and the two-group row to 364.8px. The four-pair
 row at the same constants measures, under the consumer's 16px
 Helvetica/Arial stack: pills of 89.3 / 113.9 / 116.0 / 82.2px, 413.5px in
-all with three 4px gaps (418.8px with the widest pill, Double / Pass,
+all with three 4px gaps (418.8px with the widest pill, `DoublePass`,
 selected, and 419.3px at most over any selection, since weight 600 widens
 the selected caption), and 327.2px for the three pairs with Too Good
-withheld. The implied-half captions are what keep it there: spelling both
-halves on every pill measured 509.2px. Whether the row clears the
-consumer's one-line contract is the consumer's measurement to take; these
-numbers are its input. There is one gap, the compacted one: with
+withheld. The label home's claim-alone rule is what keeps it there: with both
+halves spelled on every pill the same four measured 509.2px. Whether the row
+clears the consumer's one-line contract is the consumer's measurement to
+take; these numbers are its input. There is one gap, the compacted one: with
 one group there is no inter-group gap and no visible group caption
 (deliberately — the accessible name rides `aria-label`, where it costs no
 pixels). The form is unconditional — no media query gates it, because a
@@ -443,9 +442,14 @@ follows `Value`), `[EditorRequired]` on both `ValueChanged` and
 names across two rendered rows, and a grep-style pin that the retired
 two-axis surface is gone from the component source (the nested group, the
 per-axis accessible names and tables, the half-selection lifecycle,
-`CubeDecisionPair`) and from the rendered row. Five more cover the
-compacted pills. One is markup: the radios stay real focusable controls (no
-`hidden` / `aria-hidden` / `disabled` / `tabindex`), in both offer states.
+`CubeDecisionPair`) and from the rendered row. The caption assertions are
+deliberate literals: the component spells none of the words itself, and these
+pins say what a user reads off the row, so a re-wording at `CubeLabels` has to
+arrive here as a deliberate edit. That the rule producing them is right is the
+label home's own suite's job — do not re-source these pins against it.
+Five more cover the compacted pills. One is markup: the radios stay real
+focusable controls (no `hidden` / `aria-hidden` / `disabled` / `tabindex`),
+in both offer states.
 The other four read the scoped stylesheet as text, since bUnit has no CSS
 engine — the radio is hidden by the transparent-overlay technique rather
 than by `display: none`, a zeroed size, or `clip` (each asserted against);
@@ -534,7 +538,7 @@ flow. See "Bounded-height contract" in Architecture and its Pitfalls.
   Never carries null; re-fires whenever the selection moves (no one-shot
   lock). Pairs with `Value` for `@bind-Value`.
 - `bool OfferTooGood` (**required**, `[EditorRequired]`) — whether the
-  "Too good" pill is offered. Pass the producer's
+  `TooGoodPass` pill is offered. Pass the producer's
   `BgDecisionData.CanBeTooGood`; false renders the other three pairs only.
   The component never derives the fact.
 - `Dictionary<string, object>? AdditionalAttributes` — splatted onto the
