@@ -921,7 +921,7 @@ public class BackgammonPlayEntryTests : BunitContext
 
     // -----------------------------------------------------------------------
     //  Dice click — complete → submit signal; incomplete → display-only swap
-    //  (#2 behaviour; preserved alongside one-click advance)
+    //  (finding-2 behaviour; preserved alongside one-click advance)
     // -----------------------------------------------------------------------
 
     [Fact]

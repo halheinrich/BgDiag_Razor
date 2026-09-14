@@ -15,7 +15,7 @@ namespace BgDiag_Razor.Components;
 /// bar) commits one move from that source via
 /// <see cref="MoveEntryState.TryAdvanceFrom"/>, the model choosing which die to
 /// consume by <see cref="DicePreference"/> (the rendered dice order, leftmost
-/// first — see #2's display swap). A full play is entered by successive single
+/// first — see finding 2's display swap). A full play is entered by successive single
 /// clicks. Click index conventions:
 /// <list type="bullet">
 ///   <item>1..24 — regular board points (click a point holding an own checker)</item>
@@ -235,7 +235,7 @@ public partial class BackgammonPlayEntry : ComponentBase
     private Task HandleTrayClick() => BearOffMax();
 
     /// <summary>
-    /// The rendered dice order, leftmost die first — reflecting the #2 display
+    /// The rendered dice order, leftmost die first — reflecting the finding-2 display
     /// swap. This is the only place "leftmost die" is known; the model stays
     /// die-order-agnostic and one-click advance prefers whichever die the user
     /// currently sees on the left.
