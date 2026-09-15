@@ -1,8 +1,22 @@
-﻿<Project Sdk="Microsoft.NET.Sdk.Razor">
+<Project Sdk="Microsoft.NET.Sdk.Razor">
 
   <ItemGroup>
     <SupportedPlatform Include="browser" />
   </ItemGroup>
+
+  <!-- Trim gate, producer side (halheinrich/backgammon#197). BgQuiz's
+       WebAssembly client ships this assembly and publishes it trimmed with
+       trim warnings as errors, so a trim-unsafe construct added here would
+       otherwise surface one leg late, at that consumer's publish. Declaring
+       the assembly trimmable and running the trim analyzer in this build turns
+       the same construct into a build error here, under the repo-wide
+       TreatWarningsAsErrors. The Razor SDK enables neither on its own, so the
+       block is explicit. Per project deliberately: the test project ships
+       nowhere. IsTrimmable is pinned by BgDiagRazorTrimPostureTests. -->
+  <PropertyGroup>
+    <IsTrimmable>true</IsTrimmable>
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+  </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Components.Web" />

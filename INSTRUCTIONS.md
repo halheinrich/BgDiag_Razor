@@ -71,7 +71,8 @@ and `Directory.Packages.props` (Central Package Management).
 
 **`BgDiag_Razor.Tests/`** — bUnit over xUnit, one test class per component:
 rendering and event callbacks for the diagram, the play-entry and
-cube-actions contracts for the other two.
+cube-actions contracts for the other two. A fourth class pins the library's
+trim posture (see "Thin wrapper, by design").
 
 ## Architecture
 
@@ -81,6 +82,19 @@ This subproject exists so that `BackgammonDiagram_Lib` can stay free of any
 Blazor / Razor dependency. All SVG generation and hit-region geometry lives
 in the core lib; this project only binds that output into a Blazor component
 and surfaces click events.
+
+The wrapper is held trim-safe by its own build. BgQuiz's WebAssembly client
+ships this assembly and publishes it trimmed with trim warnings as errors, so
+the library's csproj declares `IsTrimmable` and turns on `EnableTrimAnalyzer`
+(the Razor SDK enables neither by itself). Under the repo-wide
+`TreatWarningsAsErrors`, any construct the trimmer cannot analyze — a
+reflection-bound serializer call, a `Type.GetType` on a computed name —
+becomes a build error in this repo, in the change that introduces it, rather
+than a failure at the consumer's publish (`halheinrich/backgammon#197`). The
+declaration is pinned by `BgDiagRazorTrimPostureTests`, which reads the
+SDK-emitted `IsTrimmable` assembly metadata; the analyzer switch leaves no
+such trace, so the build is its only check. The test project carries neither
+setting: it ships nowhere.
 
 ### Three components: view-only, play-entry, cube-actions
 
@@ -457,6 +471,8 @@ hue, fill, weight). The text-pinning technique is BgQuiz's
 (`MainLayoutTests`' narrow-desktop band); comments are stripped before
 matching — in the C# and Razor sources as well as the stylesheet — so prose
 naming a thing can neither satisfy nor fail an assertion about it.
+`BgDiagRazorTrimPostureTests` holds the one trim-posture pin described under
+"Thin wrapper, by design".
 
 ## Public API
 
