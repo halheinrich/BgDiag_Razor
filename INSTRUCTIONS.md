@@ -48,33 +48,30 @@ consumer and passed in. No `BgMoveGen` use — cube decisions have no
 checker-move state to drive — and no `BackgammonDiagram_Lib` use: the answer
 row is board-free.
 
-## Directory tree
+## Layout
 
-Source-only — excludes `.gitignore`, `.github/`, and build artifacts.
+Two projects under `BgDiag_Razor.slnx`, governed by repo-root
+`Directory.Build.props` (TFM, `TreatWarningsAsErrors`, XML doc generation)
+and `Directory.Packages.props` (Central Package Management).
 
-```
-BgDiag_Razor.slnx
-Directory.Build.props
-Directory.Packages.props
-BgDiag_Razor/
-  BgDiag_Razor.csproj
-  _Imports.razor
-  Components/
-    BackgammonDiagram.razor           — markup + transparent click overlay
-    BackgammonDiagram.razor.cs        — code-behind, parameters, lifecycle
-    BackgammonPlayEntry.razor         — wraps BackgammonDiagram, drives state
-    BackgammonPlayEntry.razor.cs      — code-behind, parameters, click routing
-    BackgammonPlayEntry.razor.css     — scoped: bounded-height board slot
-    BackgammonCubeActions.razor       — free-standing four-pair cube answer row
-    BackgammonCubeActions.razor.cs    — code-behind, controlled-value contract
-    BackgammonCubeActions.razor.css   — scoped: radio pills, one group
-  wwwroot/
-BgDiag_Razor.Tests/
-  BgDiag_Razor.Tests.csproj
-  BackgammonDiagramTests.cs           — bUnit rendering + event-callback tests
-  BackgammonPlayEntryTests.cs         — bUnit play-entry contract tests
-  BackgammonCubeActionsTests.cs       — bUnit cube-actions contract tests
-```
+**`BgDiag_Razor/`** — the Razor class library: three components under
+`Components/`, each a `.razor` markup file with its code-behind, and a scoped
+`.razor.css` where it styles its own markup. It ships no static assets.
+
+- **`BackgammonDiagram`** — the view-only board: the core lib's SVG injected
+  beneath a transparent click overlay built from the same hit-region
+  geometry.
+- **`BackgammonPlayEntry`** — the stateful play-entry widget: wraps
+  `BackgammonDiagram`, drives a `MoveEntryState` from its clicks, reports each
+  completed `Play`. Its scoped CSS is the bounded-height board slot.
+- **`BackgammonCubeActions`** — the free-standing cube answer row: one radio
+  group of whole `CubeClaimPair` verdicts under a controlled-value contract.
+  Its scoped CSS is the pill styling, whose horizontal metrics are
+  load-bearing at the consumer (see the file's header).
+
+**`BgDiag_Razor.Tests/`** — bUnit over xUnit, one test class per component:
+rendering and event callbacks for the diagram, the play-entry and
+cube-actions contracts for the other two.
 
 ## Architecture
 
