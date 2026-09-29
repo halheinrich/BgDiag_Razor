@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using Bunit;
 using BgDiag_Razor.Components;
 using BackgammonDiagram_Lib;
