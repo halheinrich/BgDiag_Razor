@@ -9,16 +9,21 @@ namespace BgDiag_Razor.Tests;
 
 public class BackgammonDiagramTests : BunitContext
 {
+    /// <summary>
+    /// A board with its roll drawn: the view-only primitive draws any request,
+    /// and a board's (<see cref="DiagramRequest.ForBoard"/>) is the least one —
+    /// no decision record behind it. The dice give it the dice region the
+    /// dice-click test needs.
+    /// </summary>
     private static DiagramRequest DefaultRequest =>
-    new DiagramRequest.Builder
-    {
-        Mop = [0, 2, 0, 0, 0, 0, -5, 0, -3, 0, 0, 0, 5, -5, 0, 0, 0, 3, 0, 5, 0, 0, 0, 0, -2, 0],
-        OnRollName = "Player",
-        OpponentName = "Opponent",
-        Dice = [3, 1],
-        CubeSize = 1,
-        CubeOwner = CubeOwner.Centered,
-    }.Build();
+        DiagramRequest.ForBoard(
+            new BoardPosition([0, 2, 0, 0, 0, 0, -5, 0, -3, 0, 0, 0, 5, -5, 0, 0, 0, 3, 0, 5, 0, 0, 0, 0, -2, 0]),
+            new DisplayFacts
+            {
+                OnRollName = "Player",
+                OpponentName = "Opponent",
+                Dice = new DiceFaces(3, 1),
+            });
 
     // -----------------------------------------------------------------------
     //  Existing tests (preserved)
@@ -318,26 +323,8 @@ public class BackgammonDiagramTests : BunitContext
     [Fact]
     public void HitRegions_PointOne_DiffersWhenHomeBoardOnRight_IsToggled()
     {
-        var requestDefault = new DiagramRequest.Builder
-        {
-            Mop = [0, 2, 0, 0, 0, 0, -5, 0, -3, 0, 0, 0, 5, -5, 0, 0, 0, 3, 0, 5, 0, 0, 0, 0, -2, 0],
-            OnRollName = "Player",
-            OpponentName = "Opponent",
-            Dice = [3, 1],
-            CubeSize = 1,
-            CubeOwner = CubeOwner.Centered,
-            HomeBoardOnRight = true,
-        }.Build();
-        var requestFlipped = new DiagramRequest.Builder
-        {
-            Mop = [0, 2, 0, 0, 0, 0, -5, 0, -3, 0, 0, 0, 5, -5, 0, 0, 0, 3, 0, 5, 0, 0, 0, 0, -2, 0],
-            OnRollName = "Player",
-            OpponentName = "Opponent",
-            Dice = [3, 1],
-            CubeSize = 1,
-            CubeOwner = CubeOwner.Centered,
-            HomeBoardOnRight = false,
-        }.Build();
+        var requestDefault = DefaultRequest with { HomeBoardOnRight = true };
+        var requestFlipped = DefaultRequest with { HomeBoardOnRight = false };
 
         var cutDefault = Render<BackgammonDiagram>(p => p
             .Add(p => p.Request, requestDefault)

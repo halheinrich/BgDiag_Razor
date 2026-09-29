@@ -45,7 +45,7 @@ namespace BgDiag_Razor.Components;
 /// not count until the cube turns, so the no-double equity never exceeds the
 /// cash — and the amendment rules the fourth pill withheld there. Whether a
 /// position admits the verdict is a fact about the position, derived once at
-/// the producer as <see cref="BgDecisionData.CanBeTooGood"/>; the consumer
+/// the producer as <see cref="CubeDecision.CanBeTooGood"/>; the consumer
 /// passes it through <see cref="OfferTooGood"/>, and this component never
 /// re-derives it from rules fields it does not see. Withholding is the only
 /// contextual change the row makes; the other three pairs are offered for
@@ -58,9 +58,10 @@ namespace BgDiag_Razor.Components;
 /// the answer chrome is free-standing and the consumer places it wherever its
 /// layout wants (e.g. inline in a button row beside its own submit/skip buttons),
 /// rendering the position separately with the view-only
-/// <see cref="BackgammonDiagram"/>. Routing by <c>Decision.IsCube</c> stays
-/// consumer-side; <see cref="BackgammonPlayEntry"/> still rejects cube decisions
-/// at its contract boundary.
+/// <see cref="BackgammonDiagram"/>. Routing by the record's kind
+/// (<see cref="CubeDecision"/> or <see cref="CheckerPlayDecision"/>) stays
+/// consumer-side; <see cref="BackgammonPlayEntry"/> still refuses a cube
+/// decision's request at its contract boundary.
 /// </para>
 ///
 /// <para>
@@ -177,7 +178,7 @@ public partial class BackgammonCubeActions : ComponentBase
     /// pill — <see cref="CubeClaimPair.TooGoodPass"/> — is offered.
     /// <c>false</c> renders the other three pairs only. The consumer passes
     /// the producer's own fact —
-    /// <see cref="BgDecisionData.CanBeTooGood"/>, which is <c>false</c> exactly
+    /// <see cref="CubeDecision.CanBeTooGood"/>, which is <c>false</c> exactly
     /// for a money position under the Jacoby rule with a centred cube
     /// (SPEC-scoring §3, 2026-09-02 amendment, halheinrich/backgammon#187) —
     /// and this component never derives it: it has no view of the position's

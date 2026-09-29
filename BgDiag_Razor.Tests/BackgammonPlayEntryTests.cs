@@ -1,9 +1,12 @@
+using System.Reflection;
 using Bunit;
 using BgDiag_Razor.Components;
 using BackgammonDiagram_Lib;
 using BackgammonDiagram_Lib.Rendering;
 using BgDataTypes_Lib;
-using BgMoveGen;
+using BgDataTypes_Lib.TestSupport;
+using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.Rendering;
 using Microsoft.AspNetCore.Components.Web;
 
 namespace BgDiag_Razor.Tests;
@@ -11,48 +14,59 @@ namespace BgDiag_Razor.Tests;
 public class BackgammonPlayEntryTests : BunitContext
 {
     // -----------------------------------------------------------------------
-    //  Fixtures
+    //  Fixtures — every request is a checker-play decision's own, built from a
+    //  record by the producer's builders (TestRecords), as a consumer builds one.
     // -----------------------------------------------------------------------
 
-    /// <summary>Standard backgammon starting position.</summary>
-    private static int[] StandardMop()
+    /// <summary>
+    /// The opponent's one checker, on the on-roll player's 24-point (the
+    /// opponent's ace point), out of the way of every fixture's play. A decision
+    /// position holds a checker of each side (<see cref="PositionData"/>), so a
+    /// fixture whose subject is the on-roll player's checkers alone still states
+    /// one.
+    /// </summary>
+    private static readonly (int Slot, int Checkers) OpponentAce = (24, -1);
+
+    /// <summary>
+    /// A board holding exactly the stated checkers: positive counts are the
+    /// on-roll player's, negative the opponent's (the <see cref="BoardPosition"/>
+    /// layout — slot 25 the on-roll bar).
+    /// </summary>
+    private static BoardPosition Board(params (int Slot, int Checkers)[] slots)
     {
-        var m = new int[26];
-        m[6] = 5;  m[8] = 3;  m[13] = 5;  m[24] = 2;
-        m[19] = -5; m[17] = -3; m[12] = -5; m[1] = -2;
-        return m;
+        var mop = new int[26];
+        foreach (var (slot, checkers) in slots)
+            mop[slot] = checkers;
+        return new BoardPosition(mop);
     }
 
+    /// <summary>
+    /// A checker-play decision on <paramref name="board"/> with the roll
+    /// <paramref name="die1"/>-<paramref name="die2"/>, in that rolled order. Its
+    /// one candidate is the pass — valid from every position, and never what
+    /// these tests enter: entry is judged against the generated plays, not the
+    /// record's candidates.
+    /// </summary>
+    private static CheckerPlayDecision Decision(BoardPosition board, int die1, int die2) =>
+        TestRecords.CheckerPlay(
+            position: TestRecords.Position(mop: board),
+            decision: TestRecords.CheckerPlayData(dice: [die1, die2], plays: [TestRecords.Candidate(play: [])]));
+
+    /// <summary>The decision's own request, as a consumer builds it.</summary>
+    private static DiagramRequest RequestFor(CheckerPlayDecision decision) =>
+        DiagramRequest.ForDecision(decision, PlayRanking.Equity);
+
+    /// <summary>The standard starting position.</summary>
     private static DiagramRequest StandardRequest(int die1 = 3, int die2 = 1) =>
-        new DiagramRequest.Builder
-        {
-            Mop = StandardMop(),
-            OnRollName = "Player",
-            OpponentName = "Opponent",
-            Dice = [die1, die2],
-            CubeSize = 1,
-            CubeOwner = CubeOwner.Centered,
-        }.Build();
+        RequestFor(Decision(BoardPosition.Standard, die1, die2));
 
     /// <summary>
     /// One on-roll checker on the 1-pt with dice (1,1). The only legal play is
     /// 1/off — a single move that completes in one click. Used for single-click
     /// completion and undo coverage.
     /// </summary>
-    private static DiagramRequest BearOffOneRequest()
-    {
-        var m = new int[26];
-        m[1] = 1;
-        return new DiagramRequest.Builder
-        {
-            Mop = m,
-            OnRollName = "Player",
-            OpponentName = "Opponent",
-            Dice = [1, 1],
-            CubeSize = 1,
-            CubeOwner = CubeOwner.Centered,
-        }.Build();
-    }
+    private static DiagramRequest BearOffOneRequest() =>
+        RequestFor(Decision(Board((1, 1), OpponentAce), 1, 1));
 
     /// <summary>
     /// Two on-roll checkers, on the 4-pt and 2-pt, with non-doubles dice (4,2).
@@ -63,40 +77,32 @@ public class BackgammonPlayEntryTests : BunitContext
     /// advance from the 4-pt consumes is observable in the completed play — which
     /// is exactly what the leftmost-die-preference tests assert.
     /// </summary>
-    private static DiagramRequest BearOffPairRequest()
-    {
-        var m = new int[26];
-        m[4] = 1;
-        m[2] = 1;
-        return new DiagramRequest.Builder
-        {
-            Mop = m,
-            OnRollName = "Player",
-            OpponentName = "Opponent",
-            Dice = [4, 2],
-            CubeSize = 1,
-            CubeOwner = CubeOwner.Centered,
-        }.Build();
-    }
+    private static DiagramRequest BearOffPairRequest() =>
+        RequestFor(Decision(Board((4, 1), (2, 1), OpponentAce), 4, 2));
 
     /// <summary>
-    /// One on-roll checker on the bar with dice (6,5) and an otherwise empty
+    /// One on-roll checker on the bar with dice (6,5) and an otherwise open
     /// board, so entry is unobstructed. Clicking the bar enters from 25.
     /// </summary>
-    private static DiagramRequest BarEntryRequest()
+    private static DiagramRequest BarEntryRequest() =>
+        RequestFor(Decision(Board((25, 1), OpponentAce), 6, 5));
+
+    /// <summary>
+    /// Asserts <paramref name="actual"/> is the same play as <paramref name="expected"/>
+    /// from <paramref name="start"/>. Play identity is the position reached, asked of
+    /// the starting position — <see cref="BoardState.IsSamePlay"/>, whose doc states
+    /// the contract; the notation only labels a failure.
+    /// </summary>
+    private static void AssertSamePlay(BoardPosition start, Play expected, Play? actual)
     {
-        var m = new int[26];
-        m[25] = 1;  // on-roll checker on the bar
-        return new DiagramRequest.Builder
-        {
-            Mop = m,
-            OnRollName = "Player",
-            OpponentName = "Opponent",
-            Dice = [6, 5],
-            CubeSize = 1,
-            CubeOwner = CubeOwner.Centered,
-        }.Build();
+        Assert.NotNull(actual);
+        Assert.True(new BoardState(start).IsSamePlay(expected, actual.Value),
+            $"Expected the play {expected.ToNotation()}, got {actual.Value.ToNotation()}.");
     }
+
+    /// <summary>The request the inner diagram is drawing now.</summary>
+    private static DiagramRequest? DrawnRequest(IRenderedComponent<BackgammonPlayEntry> cut) =>
+        cut.FindComponent<BackgammonDiagram>().Instance.Request;
 
     // -----------------------------------------------------------------------
     //  Click helpers — translate a click target (point / bar) to the matching
@@ -133,8 +139,8 @@ public class BackgammonPlayEntryTests : BunitContext
         return regions.Points.Count + 1;
     }
 
-    private static Task ClickRectAsync(
-        IRenderedComponent<BackgammonPlayEntry> cut, int rectIndex)
+    private static Task ClickRectAsync<TComponent>(
+        IRenderedComponent<TComponent> cut, int rectIndex) where TComponent : IComponent
     {
         var rects = cut.FindAll("rect[fill='transparent'][pointer-events='all']");
         return rects[rectIndex].ClickAsync(new MouseEventArgs());
@@ -144,45 +150,11 @@ public class BackgammonPlayEntryTests : BunitContext
     /// Clicks the dice overlay rect. The diagram emits the dice rect last, and a
     /// play always has a dice region, so the final transparent rect is the dice.
     /// </summary>
-    private static Task ClickDiceAsync(IRenderedComponent<BackgammonPlayEntry> cut)
+    private static Task ClickDiceAsync<TComponent>(IRenderedComponent<TComponent> cut)
+        where TComponent : IComponent
     {
         var rects = cut.FindAll("rect[fill='transparent'][pointer-events='all']");
         return rects[^1].ClickAsync(new MouseEventArgs());
-    }
-
-    private static bool PlayContains(Play play, int frPt, int toPt)
-    {
-        for (int i = 0; i < play.Count; i++)
-            if (play[i].FrPt == frPt && play[i].ToPt == toPt) return true;
-        return false;
-    }
-
-    private static bool PlayHasSource(Play play, int frPt)
-    {
-        for (int i = 0; i < play.Count; i++)
-            if (play[i].FrPt == frPt) return true;
-        return false;
-    }
-
-    /// <summary>
-    /// Count of moves landing on <paramref name="point"/>, regardless of the
-    /// <see cref="Move.ToPt"/> hit sign (a hit is encoded as a negative ToPt). A
-    /// completed make lands two checkers on the point, so this returns 2.
-    /// </summary>
-    private static int PlayLandingsOn(Play play, int point)
-    {
-        int n = 0;
-        for (int i = 0; i < play.Count; i++)
-            if (Math.Abs(play[i].ToPt) == point) n++;
-        return n;
-    }
-
-    /// <summary>True if any move hits on <paramref name="point"/> (ToPt == -point).</summary>
-    private static bool PlayHits(Play play, int point)
-    {
-        for (int i = 0; i < play.Count; i++)
-            if (play[i].ToPt == -point) return true;
-        return false;
     }
 
     // -----------------------------------------------------------------------
@@ -204,6 +176,70 @@ public class BackgammonPlayEntryTests : BunitContext
     {
         var cut = Render<BackgammonPlayEntry>(p => p.Add(c => c.Request, null));
         Assert.Equal(string.Empty, cut.Markup.Trim());
+    }
+
+    [Theory]
+    [InlineData(nameof(BackgammonPlayEntry.Request))]
+    [InlineData(nameof(BackgammonPlayEntry.OnSubmitRequested))]
+    public void Parameter_IsEditorRequired(string parameterName)
+    {
+        var property = typeof(BackgammonPlayEntry).GetProperty(parameterName)!;
+
+        Assert.NotNull(property.GetCustomAttribute<ParameterAttribute>());
+        Assert.NotNull(property.GetCustomAttribute<EditorRequiredAttribute>());
+    }
+
+    // -----------------------------------------------------------------------
+    //  The board during entry — the request's own redraw of its decision
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public void EntryBoard_AtStart_IsTheRequestsWorkingBoardOfItsDecisionsBoard()
+    {
+        // Before any click the drawn board is the decision's own board, drawn as
+        // the request's working board — the one mid-entry redraw, used from the
+        // first render, so the presentation never switches path during entry.
+        var request = StandardRequest(3, 1);
+
+        var cut = Render<BackgammonPlayEntry>(p => p
+            .Add(c => c.Request, request));
+
+        Assert.Equal(request.WithWorkingBoard(request.Board), DrawnRequest(cut));
+    }
+
+    [Fact]
+    public async Task EntryBoard_AfterAClick_IsTheWorkingBoardTheClickLeft()
+    {
+        // 24/21 with the leftmost die (3): the drawn board is the request's
+        // redraw of exactly that position — no board, record or display facts
+        // assembled by the component.
+        var request = StandardRequest(3, 1);
+        var afterClick = Board(
+            (6, 5), (8, 3), (13, 5), (24, 1), (21, 1),
+            (19, -5), (17, -3), (12, -5), (1, -2));
+
+        var cut = Render<BackgammonPlayEntry>(p => p
+            .Add(c => c.Request, request));
+
+        await ClickRectAsync(cut, RectIndexForPoint(request, 24));
+
+        Assert.Equal(request.WithWorkingBoard(afterClick), DrawnRequest(cut));
+    }
+
+    [Fact]
+    public async Task EntryBoard_AfterDiceSwap_DrawsTheRollReversed()
+    {
+        var request = StandardRequest(3, 1);
+
+        var cut = Render<BackgammonPlayEntry>(p => p
+            .Add(c => c.Request, request)
+            .Add(c => c.OnSubmitRequested, () => { }));
+
+        await ClickDiceAsync(cut);
+        Assert.Equal(request.WithWorkingBoard(request.Board, DiceOrder.Reversed), DrawnRequest(cut));
+
+        await ClickDiceAsync(cut);
+        Assert.Equal(request.WithWorkingBoard(request.Board, DiceOrder.AsRolled), DrawnRequest(cut));
     }
 
     // -----------------------------------------------------------------------
@@ -249,25 +285,38 @@ public class BackgammonPlayEntryTests : BunitContext
     }
 
     // -----------------------------------------------------------------------
-    //  Cube decision guard
+    //  Decision-kind guard — only a checker-play decision's request is entered
     // -----------------------------------------------------------------------
 
     [Fact]
-    public void CubeDecision_ThrowsNotImplemented()
+    public void CubeDecisionRequest_IsRefused()
     {
-        var cubeRequest = new DiagramRequest.Builder
-        {
-            Mop = StandardMop(),
-            IsCube = true,
-            Dice = [0, 0],
-            OnRollName = "Player",
-            OpponentName = "Opponent",
-            CubeSize = 1,
-            CubeOwner = CubeOwner.Centered,
-        }.Build();
+        AssertRefused(DiagramRequest.ForDecision(TestRecords.Cube(), PlayRanking.Equity));
+    }
 
-        Assert.Throws<NotImplementedException>(() =>
-            Render<BackgammonPlayEntry>(p => p.Add(c => c.Request, cubeRequest)));
+    [Fact]
+    public void BoardRequest_IsRefused()
+    {
+        // A board with its roll drawn is still no decision: there is nothing to
+        // enter a play against.
+        AssertRefused(DiagramRequest.ForBoard(
+            BoardPosition.Standard, new DisplayFacts { Dice = new DiceFaces(3, 1) }));
+    }
+
+    [Fact]
+    public void WorkingBoardRequest_IsRefused()
+    {
+        // The component's own redraw handed back in is not a decision's request:
+        // the entry would restart from a mid-entry board.
+        var request = StandardRequest(3, 1);
+        AssertRefused(request.WithWorkingBoard(request.Board));
+    }
+
+    private void AssertRefused(DiagramRequest request)
+    {
+        var refusal = Assert.Throws<ArgumentException>(() =>
+            Render<BackgammonPlayEntry>(p => p.Add(c => c.Request, request)));
+        Assert.Equal(nameof(BackgammonPlayEntry.Request), refusal.ParamName);
     }
 
     // -----------------------------------------------------------------------
@@ -289,8 +338,7 @@ public class BackgammonPlayEntryTests : BunitContext
         await ClickRectAsync(cut, RectIndexForPoint(request, 1));
 
         Assert.Equal(1, fireCount);
-        Assert.NotNull(completed);
-        Assert.True(completed!.Value.Count >= 1);
+        AssertSamePlay(request.Board, [new(1, 0)], completed);
     }
 
     [Fact]
@@ -310,15 +358,15 @@ public class BackgammonPlayEntryTests : BunitContext
 
         await ClickRectAsync(cut, RectIndexForPoint(request, 2));
         Assert.Equal(1, fireCount);
-        Assert.NotNull(completed);
-        Assert.Equal(2, completed!.Value.Count);
+        AssertSamePlay(request.Board, [new(4, 0), new(2, 0)], completed);
     }
 
     [Fact]
     public async Task ClickSource_AdvancesByLeftmostDie()
     {
         // No swap ⇒ preference is [4, 2]. From the 4-pt the leftmost die (4) is
-        // legal, so the click bears off directly: 4/off (Move 4→0), not 4/2.
+        // legal, so the click bears off directly: 4/off, not 4/2 — and the play
+        // reached bears off both checkers.
         var request = BearOffPairRequest();
         Play? completed = null;
 
@@ -329,9 +377,7 @@ public class BackgammonPlayEntryTests : BunitContext
         await ClickRectAsync(cut, RectIndexForPoint(request, 4));
         await ClickRectAsync(cut, RectIndexForPoint(request, 2));
 
-        Assert.NotNull(completed);
-        Assert.True(PlayContains(completed!.Value, frPt: 4, toPt: 0),
-            "Leftmost die (4) should have borne off directly from the 4-pt (4/off).");
+        AssertSamePlay(request.Board, [new(4, 0), new(2, 0)], completed);
     }
 
     [Fact]
@@ -339,7 +385,7 @@ public class BackgammonPlayEntryTests : BunitContext
     {
         // A dice click on the incomplete play swaps the display order to 2-4, so
         // the preference becomes [2, 4]. Now the same 4-pt click consumes die 2:
-        // 4/2 (Move 4→2), not 4/off.
+        // 4/2, not 4/off — and the play reached leaves a checker on the 2-pt.
         var request = BearOffPairRequest();
         Play? completed = null;
 
@@ -352,9 +398,7 @@ public class BackgammonPlayEntryTests : BunitContext
         await ClickRectAsync(cut, RectIndexForPoint(request, 4));
         await ClickRectAsync(cut, RectIndexForPoint(request, 2));
 
-        Assert.NotNull(completed);
-        Assert.True(PlayContains(completed!.Value, frPt: 4, toPt: 2),
-            "After the swap, die 2 should move 4/2 from the 4-pt.");
+        AssertSamePlay(request.Board, [new(4, 2), new(2, 0)], completed);
     }
 
     [Fact]
@@ -376,19 +420,16 @@ public class BackgammonPlayEntryTests : BunitContext
         await ClickRectAsync(cut, RectIndexForPoint(request, 4));
 
         Assert.Equal(1, fireCount);
-        Assert.True(PlayContains(completed!.Value, frPt: 2, toPt: 0),
-            "The 2-pt click should have borne off via die 2 (2/off).");
+        AssertSamePlay(request.Board, [new(2, 0), new(4, 0)], completed);
     }
 
     [Fact]
     public async Task BarClick_EntersFromBar()
     {
-        // A checker on the bar enters via a single bar click (FrPt 25): the
-        // leftmost die (6) enters bar/19, then the 19-pt click plays 19/14 to
-        // finish. (The completed Play is the engine's canonical representative
-        // for the final-board signature, so the exact entry point isn't readable
-        // off it — leftmost-die preference is covered by the bear-off test. Here
-        // we assert only that the bar click produced an entry move from 25.)
+        // A checker on the bar enters via a single bar click: the leftmost die
+        // (6) enters bar/19, then the 19-pt click plays 19/14 to finish. The
+        // play reached is the one landing the checker on the 14-pt, whichever
+        // entry route spells it.
         var request = BarEntryRequest();
         Play? completed = null;
         var fireCount = 0;
@@ -401,8 +442,7 @@ public class BackgammonPlayEntryTests : BunitContext
         await ClickRectAsync(cut, RectIndexForPoint(request, 19));
 
         Assert.Equal(1, fireCount);
-        Assert.True(PlayHasSource(completed!.Value, frPt: 25),
-            "The bar click should commit an entry move from the bar (FrPt 25).");
+        AssertSamePlay(request.Board, [new(25, 19), new(19, 14)], completed);
     }
 
     [Fact]
@@ -452,30 +492,16 @@ public class BackgammonPlayEntryTests : BunitContext
         await ClickRectAsync(cut, RectIndexForPoint(request, 5));
 
         Assert.Equal(1, fireCount);
-        Assert.NotNull(completed);
-        Assert.True(PlayContains(completed!.Value, frPt: 8, toPt: 5), "8/5 should be part of the make.");
-        Assert.True(PlayContains(completed!.Value, frPt: 6, toPt: 5), "6/5 should be part of the make.");
+        AssertSamePlay(request.Board, [new(8, 5), new(6, 5)], completed);
     }
 
     [Fact]
     public async Task ClickOpponentBlot_MakeAndHit_FiresCompleted()
     {
         // Own on 8 and 6, an opponent blot on 5, dice (3,1). Clicking the 5-point
-        // makes it over the blot: 8/5* hits, 6/5 covers. Two checkers land on 5 and
-        // one of the arrivals is a hit (negative ToPt). Both dice ⇒ completes.
-        var m = new int[26];
-        m[8] = 1;
-        m[6] = 1;
-        m[5] = -1;  // opponent blot
-        var request = new DiagramRequest.Builder
-        {
-            Mop = m,
-            OnRollName = "Player",
-            OpponentName = "Opponent",
-            Dice = [3, 1],
-            CubeSize = 1,
-            CubeOwner = CubeOwner.Centered,
-        }.Build();
+        // makes it over the blot: 8/5* hits, 6/5 covers. Both dice ⇒ completes, and
+        // the play reached has the point made and the blot on the bar.
+        var request = RequestFor(Decision(Board((8, 1), (6, 1), (5, -1)), 3, 1));
         Play? completed = null;
         var fireCount = 0;
 
@@ -486,9 +512,7 @@ public class BackgammonPlayEntryTests : BunitContext
         await ClickRectAsync(cut, RectIndexForPoint(request, 5));
 
         Assert.Equal(1, fireCount);
-        Assert.NotNull(completed);
-        Assert.Equal(2, PlayLandingsOn(completed!.Value, point: 5));  // point made (two checkers)
-        Assert.True(PlayHits(completed!.Value, point: 5), "An arrival onto the blot should be a hit.");
+        AssertSamePlay(request.Board, [new(8, -5), new(6, 5)], completed);
     }
 
     [Fact]
@@ -497,22 +521,11 @@ public class BackgammonPlayEntryTests : BunitContext
         // One own checker on 18, an opponent blot on 10, dice (6,2). Point 10 is
         // unmakeable (a lone checker) and has no direct single-die landing (18 is 8
         // pips from 10), so the land-one fallback walks the combined path to it —
-        // 18/16 16/10* (equivalently 18/12 12/10*, same final board) — hitting the
+        // 18/16 16/10* (equivalently 18/12 12/10*, the same play) — hitting the
         // blot. Both dice are consumed, so the play completes and OnPlayCompleted
         // fires. This is the end-to-end of the TryMakePoint(int) follow-up: a
         // destination click that lands via a combined multi-die path.
-        var m = new int[26];
-        m[18] = 1;
-        m[10] = -1;  // opponent blot
-        var request = new DiagramRequest.Builder
-        {
-            Mop = m,
-            OnRollName = "Player",
-            OpponentName = "Opponent",
-            Dice = [6, 2],
-            CubeSize = 1,
-            CubeOwner = CubeOwner.Centered,
-        }.Build();
+        var request = RequestFor(Decision(Board((18, 1), (10, -1)), 6, 2));
         Play? completed = null;
         var fireCount = 0;
 
@@ -523,9 +536,7 @@ public class BackgammonPlayEntryTests : BunitContext
         await ClickRectAsync(cut, RectIndexForPoint(request, 10));
 
         Assert.Equal(1, fireCount);
-        Assert.NotNull(completed);
-        Assert.Equal(1, PlayLandingsOn(completed!.Value, point: 10));  // one checker lands on 10
-        Assert.True(PlayHits(completed!.Value, point: 10), "The arrival onto the blot should be a hit.");
+        AssertSamePlay(request.Board, [new(18, 16), new(16, -10)], completed);
     }
 
     [Fact]
@@ -535,18 +546,7 @@ public class BackgammonPlayEntryTests : BunitContext
         // (12/10 + 14/12/10) that leaves one 2 unplayed — so the make commits but the
         // play stays in-progress (OnPlayCompleted must NOT fire). A follow-up click on
         // the now-own 10-point advances 10/8 with the last die and completes.
-        var m = new int[26];
-        m[12] = 1;
-        m[14] = 1;
-        var request = new DiagramRequest.Builder
-        {
-            Mop = m,
-            OnRollName = "Player",
-            OpponentName = "Opponent",
-            Dice = [2, 2],
-            CubeSize = 1,
-            CubeOwner = CubeOwner.Centered,
-        }.Build();
+        var request = RequestFor(Decision(Board((12, 1), (14, 1), OpponentAce), 2, 2));
         var fireCount = 0;
 
         var cut = Render<BackgammonPlayEntry>(p => p
@@ -568,17 +568,7 @@ public class BackgammonPlayEntryTests : BunitContext
         // lands the lone checker via die 3 (8/5) — leaving the play in-progress. A
         // follow-up click on the now-own 5-point advances 5/4 (die 1) and completes,
         // proving the move-one actually landed a checker on 5.
-        var m = new int[26];
-        m[8] = 1;
-        var request = new DiagramRequest.Builder
-        {
-            Mop = m,
-            OnRollName = "Player",
-            OpponentName = "Opponent",
-            Dice = [3, 1],
-            CubeSize = 1,
-            CubeOwner = CubeOwner.Centered,
-        }.Build();
+        var request = RequestFor(Decision(Board((8, 1), OpponentAce), 3, 1));
         var fireCount = 0;
 
         var cut = Render<BackgammonPlayEntry>(p => p
@@ -598,20 +588,10 @@ public class BackgammonPlayEntryTests : BunitContext
         // Two own checkers on 8, dice (3,1). The 8-point holds own checkers, so the
         // click advances (E1) and never engages make (the producer rejects a make on
         // an own-occupied point). Two clicks play 8/5 (die 3) then 8/7 (die 1) — two
-        // distinct single advances off the source — and the completed play carries
-        // both. If the click had wrongly routed to make, the own-occupied guard would
-        // make it a no-op and the play would never complete.
-        var m = new int[26];
-        m[8] = 2;
-        var request = new DiagramRequest.Builder
-        {
-            Mop = m,
-            OnRollName = "Player",
-            OpponentName = "Opponent",
-            Dice = [3, 1],
-            CubeSize = 1,
-            CubeOwner = CubeOwner.Centered,
-        }.Build();
+        // distinct single advances off the source. If the click had wrongly routed to
+        // make, the own-occupied guard would make it a no-op and the play would never
+        // complete.
+        var request = RequestFor(Decision(Board((8, 2), OpponentAce), 3, 1));
         Play? completed = null;
         var fireCount = 0;
 
@@ -623,8 +603,7 @@ public class BackgammonPlayEntryTests : BunitContext
         await ClickRectAsync(cut, RectIndexForPoint(request, 8));  // 8/7 (die 1)
 
         Assert.Equal(1, fireCount);
-        Assert.True(PlayContains(completed!.Value, frPt: 8, toPt: 5), "First advance 8/5.");
-        Assert.True(PlayContains(completed!.Value, frPt: 8, toPt: 7), "Second advance 8/7.");
+        AssertSamePlay(request.Board, [new(8, 5), new(8, 7)], completed);
     }
 
     [Fact]
@@ -640,7 +619,7 @@ public class BackgammonPlayEntryTests : BunitContext
         await ClickRectAsync(cut, RectIndexForPoint(request, 1));
         Assert.Equal(1, fireCount);
 
-        // Post-completion the rendered Mop reshapes which overlay rects exist;
+        // Post-completion the redrawn board reshapes which overlay rects exist;
         // the contract under test is "no further OnPlayCompleted fires," which
         // must hold for any surviving click target.
         var rectsPost = cut.FindAll("rect[fill='transparent'][pointer-events='all']");
@@ -669,8 +648,7 @@ public class BackgammonPlayEntryTests : BunitContext
         await ClickRectAsync(cut, RectIndexForTray(request));
 
         Assert.Equal(1, fireCount);
-        Assert.NotNull(completed);
-        Assert.Equal(2, completed!.Value.Count);  // both checkers borne off
+        AssertSamePlay(request.Board, [new(4, 0), new(2, 0)], completed);
     }
 
     [Fact]
@@ -682,18 +660,7 @@ public class BackgammonPlayEntryTests : BunitContext
         //   6/4  (die 2) + 4/off (die 6, overshoot) → {3}
         // The tie makes max bear-off ambiguous, so the tray click is a no-op and
         // the user must bear off via individual home-point clicks.
-        var m = new int[26];
-        m[6] = 1;
-        m[3] = 1;
-        var request = new DiagramRequest.Builder
-        {
-            Mop = m,
-            OnRollName = "Player",
-            OpponentName = "Opponent",
-            Dice = [6, 2],
-            CubeSize = 1,
-            CubeOwner = CubeOwner.Centered,
-        }.Build();
+        var request = RequestFor(Decision(Board((6, 1), (3, 1), OpponentAce), 6, 2));
         var fired = false;
 
         var cut = Render<BackgammonPlayEntry>(p => p
@@ -721,18 +688,7 @@ public class BackgammonPlayEntryTests : BunitContext
         // so TryBearOffMax is a no-op. Two on-board checkers keep the borne-off
         // count in range, so the tray hit-rect is still drawn and the click
         // reaches the handler.
-        var m = new int[26];
-        m[8] = 1;
-        m[6] = 1;
-        var request = new DiagramRequest.Builder
-        {
-            Mop = m,
-            OnRollName = "Player",
-            OpponentName = "Opponent",
-            Dice = [2, 1],
-            CubeSize = 1,
-            CubeOwner = CubeOwner.Centered,
-        }.Build();
+        var request = RequestFor(Decision(Board((8, 1), (6, 1), OpponentAce), 2, 1));
         var fired = false;
 
         var cut = Render<BackgammonPlayEntry>(p => p
@@ -781,7 +737,9 @@ public class BackgammonPlayEntryTests : BunitContext
 
         await cut.InvokeAsync(() => cut.Instance.UndoLast());
 
-        // State is back at "play in progress with 0 moves committed."
+        // State is back at "play in progress with 0 moves committed", and the
+        // board drawn is the decision's own again.
+        Assert.Equal(request.WithWorkingBoard(request.Board), DrawnRequest(cut));
         await ClickRectAsync(cut, RectIndexForPoint(request, 1));
         Assert.Equal(2, fireCount);
     }
@@ -803,6 +761,7 @@ public class BackgammonPlayEntryTests : BunitContext
 
         await cut.InvokeAsync(() => cut.Instance.UndoAll());
 
+        Assert.Equal(request.WithWorkingBoard(request.Board), DrawnRequest(cut));
         await ClickRectAsync(cut, RectIndexForPoint(request, 4));
         await ClickRectAsync(cut, RectIndexForPoint(request, 2));
         Assert.Equal(2, fireCount);
@@ -819,14 +778,14 @@ public class BackgammonPlayEntryTests : BunitContext
     }
 
     // -----------------------------------------------------------------------
-    //  Reset semantics — value equality on (Mop, Dice)
+    //  Reset semantics — the decision's start: its board and its rolled roll
     // -----------------------------------------------------------------------
 
     [Fact]
-    public async Task DifferentMop_ResetsState()
+    public async Task DifferentBoard_ResetsState()
     {
-        // Begin a play on A (commit one move), then switch to a different-Mop
-        // problem B. B's board only has an on-roll checker on the 1-pt if the
+        // Begin a play on A (commit one move), then switch to a problem B on a
+        // different board. B's board only has an on-roll checker on the 1-pt if the
         // state reset — in A's board the 1-pt holds opponent checkers. So a
         // completion from clicking B's 1-pt proves the reset.
         var requestA = StandardRequest(3, 1);
@@ -839,7 +798,7 @@ public class BackgammonPlayEntryTests : BunitContext
         await ClickRectAsync(cut, RectIndexForPoint(requestA, 24));  // 24/21, incomplete
         Assert.Equal(0, fireCount);
 
-        var requestB = BearOffOneRequest();  // different Mop ⇒ new problem
+        var requestB = BearOffOneRequest();  // different board ⇒ new problem
         cut.Render(p => p
             .Add(c => c.Request, requestB)
             .Add(c => c.OnPlayCompleted, (Play _) => { fireCount++; }));
@@ -851,24 +810,13 @@ public class BackgammonPlayEntryTests : BunitContext
     [Fact]
     public async Task DifferentDice_ResetsState()
     {
-        // Same Mop (one checker on the 1-pt), different dice ⇒ new problem. After
+        // Same board (one checker on the 1-pt), different dice ⇒ new problem. After
         // completing A the checker is borne off; switching dice must rebuild the
         // state (checker back on the 1-pt) so B can complete again. Without a
         // reset the carried-over completed state would make B's click a no-op.
-        var m = new int[26];
-        m[1] = 1;
-        var dice11 = new DiagramRequest.Builder
-        {
-            Mop = m, Dice = [1, 1],
-            OnRollName = "P", OpponentName = "O",
-            CubeSize = 1, CubeOwner = CubeOwner.Centered,
-        }.Build();
-        var dice22 = new DiagramRequest.Builder
-        {
-            Mop = m, Dice = [2, 2],
-            OnRollName = "P", OpponentName = "O",
-            CubeSize = 1, CubeOwner = CubeOwner.Centered,
-        }.Build();
+        var board = Board((1, 1), OpponentAce);
+        var dice11 = RequestFor(Decision(board, 1, 1));
+        var dice22 = RequestFor(Decision(board, 2, 2));
 
         var fireCount = 0;
         var cut = Render<BackgammonPlayEntry>(p => p
@@ -887,15 +835,16 @@ public class BackgammonPlayEntryTests : BunitContext
     }
 
     [Fact]
-    public async Task SameMopAndDice_DoesNotResetState()
+    public async Task SameStartInAnotherRecord_DoesNotResetState()
     {
-        // Two distinct DiagramRequest instances with byte-identical (Mop, Dice).
-        // The reset key is value equality, not reference equality — mid-play state
-        // must survive a parameter re-set.
+        // Two distinct records, and so two distinct requests, starting from the
+        // same board with the same roll. The reset key is the start, compared by
+        // value — not record or request identity — so mid-play state must survive
+        // a parameter re-set.
         var requestA = StandardRequest(3, 1);
         var requestB = StandardRequest(3, 1);
 
-        Assert.NotSame(requestA, requestB);
+        Assert.NotSame(requestA.Decision, requestB.Decision);
 
         var fireCount = 0;
         var cut = Render<BackgammonPlayEntry>(p => p
@@ -906,7 +855,7 @@ public class BackgammonPlayEntryTests : BunitContext
         await ClickRectAsync(cut, RectIndexForPoint(requestA, 24));
         Assert.Equal(0, fireCount);
 
-        // Re-render with requestB. Because (Mop, Dice) match, state survives — so
+        // Re-render with requestB. Because the start matches, state survives — so
         // only die 1 remains and the 24-pt now holds a single checker.
         cut.Render(p => p
             .Add(c => c.Request, requestB)
@@ -917,6 +866,29 @@ public class BackgammonPlayEntryTests : BunitContext
         // incomplete (fireCount 0).
         await ClickRectAsync(cut, RectIndexForPoint(requestB, 24));
         Assert.Equal(1, fireCount);
+    }
+
+    [Fact]
+    public async Task SameStartWithNewOptions_KeepsEntry_AndRedrawsWithTheNewRequest()
+    {
+        // The consumer re-passes the same decision drawn another way mid-entry. The
+        // entry survives, and the board drawn is the NEW request's redraw of the
+        // entry's position: options and presentation follow the current request.
+        var request = StandardRequest(3, 1);
+        var afterClick = Board(
+            (6, 5), (8, 3), (13, 5), (24, 1), (21, 1),
+            (19, -5), (17, -3), (12, -5), (1, -2));
+
+        var cut = Render<BackgammonPlayEntry>(p => p
+            .Add(c => c.Request, request));
+
+        await ClickRectAsync(cut, RectIndexForPoint(request, 24));  // 24/21
+
+        var flipped = request with { HomeBoardOnRight = false };
+        cut.Render(p => p
+            .Add(c => c.Request, flipped));
+
+        Assert.Equal(flipped.WithWorkingBoard(afterClick), DrawnRequest(cut));
     }
 
     // -----------------------------------------------------------------------
@@ -1005,5 +977,117 @@ public class BackgammonPlayEntryTests : BunitContext
 
         Assert.Contains("5-2 to play", cut.Markup);
         Assert.DoesNotContain("2-5 to play", cut.Markup);
+    }
+
+    // -----------------------------------------------------------------------
+    //  Wire — parent → BackgammonPlayEntry → handler, through a consumer's own
+    //  render tree (EntryHost), and back into the parent's state
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public async Task Wire_CompletedPlayReachesTheParent_ThenTheDiceClickSubmitsThroughIt()
+    {
+        // Two clicks in the inner diagram complete the play: the parent's handler
+        // receives it and re-renders, re-passing its request. That re-pass must
+        // leave the entry complete — the dice click then reaches the parent's
+        // submit handler, not the display swap.
+        var request = BearOffPairRequest();
+        var cut = Render<EntryHost>(p => p.Add(h => h.Request, request));
+
+        await ClickRectAsync(cut, RectIndexForPoint(request, 4));
+        Assert.Equal("completed 0, submitted 0", cut.Find(".host-status").TextContent);
+
+        await ClickRectAsync(cut, RectIndexForPoint(request, 2));
+        Assert.Equal("completed 1, submitted 0", cut.Find(".host-status").TextContent);
+        AssertSamePlay(request.Board, [new(4, 0), new(2, 0)], cut.Instance.LastCompleted);
+
+        await ClickDiceAsync(cut);
+        Assert.Equal("completed 1, submitted 1", cut.Find(".host-status").TextContent);
+    }
+
+    [Fact]
+    public async Task Wire_ParentAdvancingToANewDecision_RestartsEntryOnItsBoard()
+    {
+        // The parent moves on mid-entry, as a quiz does: the entry restarts from
+        // the new decision's board, drawn as the new request's working board, and
+        // the new play completes into the parent.
+        var requestA = StandardRequest(3, 1);
+        var requestB = BearOffOneRequest();
+        var cut = Render<EntryHost>(p => p.Add(h => h.Request, requestA));
+
+        await ClickRectAsync(cut, RectIndexForPoint(requestA, 24));  // 24/21, in progress
+
+        cut.Render(p => p.Add(h => h.Request, requestB));
+        Assert.Equal(
+            requestB.WithWorkingBoard(requestB.Board),
+            cut.FindComponent<BackgammonDiagram>().Instance.Request);
+
+        await ClickRectAsync(cut, RectIndexForPoint(requestB, 1));
+        Assert.Equal("completed 1, submitted 0", cut.Find(".host-status").TextContent);
+        AssertSamePlay(requestB.Board, [new(1, 0)], cut.Instance.LastCompleted);
+    }
+
+    [Fact]
+    public async Task Wire_ParentRebuildingTheRequest_KeepsTheEntryInProgress()
+    {
+        // The parent rebuilds its request for the same decision mid-entry (parent
+        // churn, as a settings change causes). The entry keeps its committed move,
+        // so one more click completes the play into the parent.
+        var decision = Decision(BoardPosition.Standard, 3, 1);
+        var request = RequestFor(decision);
+        var cut = Render<EntryHost>(p => p.Add(h => h.Request, request));
+
+        await ClickRectAsync(cut, RectIndexForPoint(request, 24));  // 24/21 (die 3)
+
+        cut.Render(p => p.Add(h => h.Request, RequestFor(decision)));
+
+        await ClickRectAsync(cut, RectIndexForPoint(request, 24));  // 24/23 (die 1), completes
+        Assert.Equal("completed 1, submitted 0", cut.Find(".host-status").TextContent);
+        AssertSamePlay(request.Board, [new(24, 21), new(24, 23)], cut.Instance.LastCompleted);
+    }
+
+    /// <summary>
+    /// A consumer in miniature, for the wire tests: a parent that binds
+    /// <see cref="BackgammonPlayEntry"/> through its own render tree — by
+    /// parameter name, as Razor markup compiles to, not through bUnit's
+    /// parameter builder — handles both callbacks in its own state, and renders
+    /// that state, so a click in the inner diagram travels parent → entry →
+    /// handler and back into the parent's markup.
+    /// </summary>
+    public sealed class EntryHost : ComponentBase
+    {
+        private int _completedCount;
+        private int _submittedCount;
+
+        /// <summary>The decision's request the parent is showing.</summary>
+        [Parameter, EditorRequired]
+        public DiagramRequest? Request { get; set; }
+
+        /// <summary>The last play the entry reported to the parent.</summary>
+        public Play? LastCompleted { get; private set; }
+
+        protected override void BuildRenderTree(RenderTreeBuilder builder)
+        {
+            builder.OpenElement(0, "p");
+            builder.AddAttribute(1, "class", "host-status");
+            builder.AddContent(2, $"completed {_completedCount}, submitted {_submittedCount}");
+            builder.CloseElement();
+
+            builder.OpenComponent<BackgammonPlayEntry>(3);
+            builder.AddComponentParameter(4, nameof(BackgammonPlayEntry.Request), Request);
+            builder.AddComponentParameter(5, nameof(BackgammonPlayEntry.OnPlayCompleted),
+                EventCallback.Factory.Create<Play>(this, HandlePlayCompleted));
+            builder.AddComponentParameter(6, nameof(BackgammonPlayEntry.OnSubmitRequested),
+                EventCallback.Factory.Create(this, HandleSubmitRequested));
+            builder.CloseComponent();
+        }
+
+        private void HandlePlayCompleted(Play play)
+        {
+            LastCompleted = play;
+            _completedCount++;
+        }
+
+        private void HandleSubmitRequested() => _submittedCount++;
     }
 }

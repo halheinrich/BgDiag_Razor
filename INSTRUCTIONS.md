@@ -19,17 +19,18 @@ https://github.com/halheinrich/BgDiag_Razor — branch `main`.
 
 ## Depends on
 
-- **BackgammonDiagram_Lib** — `DiagramRequest`, `DiagramOptions`,
-  `DiagramRenderer`, `BoardHitRegions`, `SvgViewBox`, `HitRect`, and
-  `CubeLabels`, the one spelling of a cube answer — `BackgammonCubeActions`
-  captions every pill through it. Referenced as a project reference, not a
-  package.
-- **BgDataTypes_Lib** — `BoardState` (class), `Play` (struct), `Move`
-  (readonly record struct), `CubeOwner` (enum), `CubeAction` (enum),
-  `CubeClaim` (enum), `CubeClaimPair` (readonly record struct). Move
-  primitives and the mutable board live in the shared-data layer; consumed
-  here by `BackgammonPlayEntry` (`Play` on the public surface,
-  `BoardState.FromMop` for state construction), by `BackgammonCubeActions`
+- **BackgammonDiagram_Lib** — `DiagramRequest` (a decision's request, and
+  `WithWorkingBoard`, its redraw of a checker play's board mid-entry),
+  `DiceOrder`, `DiagramOptions`, `DiagramRenderer`, `BoardHitRegions`,
+  `SvgViewBox`, `HitRect`, and `CubeLabels`, the one spelling of a cube
+  answer — `BackgammonCubeActions` captions every pill through it.
+  Referenced as a project reference, not a package.
+- **BgDataTypes_Lib** — `CheckerPlayDecision` (the decision kind play entry
+  takes), `BoardPosition` (readonly struct, the position value), `Play`
+  (struct), `CubeClaim` (enum), `CubeClaimPair` (readonly record struct).
+  Consumed here by `BackgammonPlayEntry` (the checker-play record a request
+  presents, read for its board and roll; `BoardPosition` value equality for
+  the reset key; `Play` on the public surface), by `BackgammonCubeActions`
   (`CubeClaimPair` on the public surface and its canonical instances as the
   offered options; `CubeClaim` to gate the Too Good pair), and by tests.
   Referenced as a project reference (also
@@ -41,9 +42,17 @@ https://github.com/halheinrich/BgDiag_Razor — branch `main`.
   project reference. Transitively brings `BgMoveGen`'s standalone surface;
   this subproject does not consume the NativeAOT interop layer.
 
+Test-only:
+
+- **BgDataTypes_Lib.TestSupport** — `TestRecords`, the producer's record
+  builders: the one way the play-entry tests build the decision records their
+  requests are made from, so no test here restates a record's construction.
+  Listed in `BgDiag_Razor.slnx`, which holds every in-tree project the build
+  reaches.
+
 `BackgammonCubeActions` consumes `CubeClaimPair` (and `CubeClaim`, for the
 offerability gate) from `BgDataTypes_Lib` for its four-pair answer surface;
-the offerability fact itself is `BgDecisionData.CanBeTooGood`, read by the
+the offerability fact itself is `CubeDecision.CanBeTooGood`, read by the
 consumer and passed in. No `BgMoveGen` use — cube decisions have no
 checker-move state to drive — and no `BackgammonDiagram_Lib` use: the answer
 row is board-free.
@@ -61,9 +70,10 @@ and `Directory.Packages.props` (Central Package Management).
 - **`BackgammonDiagram`** — the view-only board: the core lib's SVG injected
   beneath a transparent click overlay built from the same hit-region
   geometry.
-- **`BackgammonPlayEntry`** — the stateful play-entry widget: wraps
-  `BackgammonDiagram`, drives a `MoveEntryState` from its clicks, reports each
-  completed `Play`. Its scoped CSS is the bounded-height board slot.
+- **`BackgammonPlayEntry`** — the stateful play-entry widget for a
+  checker-play decision: wraps `BackgammonDiagram`, drives a `MoveEntryState`
+  from its clicks, reports each completed `Play`. Its scoped CSS is the
+  bounded-height board slot.
 - **`BackgammonCubeActions`** — the free-standing cube answer row: one radio
   group of whole `CubeClaimPair` verdicts under a controlled-value contract.
   Its scoped CSS is the pill styling, whose horizontal metrics are
@@ -105,10 +115,11 @@ playback, analytics inspection) use it directly.
 
 `BackgammonPlayEntry` is the **stateful play-entry widget** — it composes
 `BackgammonDiagram` and drives a `BgMoveGen.MoveEntryState` from its click
-events, rebuilding the displayed `Mop` from the intermediate position after
-each legal click and reporting the assembled `Play` once the user has
-clicked a complete legal sequence. Handles play decisions only
-(`Decision.IsCube == false`); cube decisions throw at the contract boundary.
+events, redrawing the board from the intermediate position after each legal
+click and reporting the assembled `Play` once the user has clicked a
+complete legal sequence. Handles checker-play decisions only (a
+`CheckerPlayDecision`'s request); any other request is refused at the
+contract boundary.
 
 `BackgammonCubeActions` is the **free-standing cube answer row** — one radio
 group offering the reachable cube verdicts as whole `CubeClaimPair`s (three
@@ -127,9 +138,10 @@ The split keeps the encapsulation rule clean: a consumer that just wants to
 display a position should not pay for click-by-click state machinery, a
 play consumer should not have to wire move-entry state externally to a
 view-only component, and a cube consumer should not have to accept a
-board-bundled layout just to get a row of radios. Consumers route by
-`Decision.IsCube`: play decisions → `BackgammonPlayEntry`; cube decisions →
-`BackgammonDiagram` + `BackgammonCubeActions`.
+board-bundled layout just to get a row of radios. Consumers route by the
+record's kind (`BgDecisionData.Match` / `Switch`): a `CheckerPlayDecision`
+→ `BackgammonPlayEntry`; a `CubeDecision` → `BackgammonDiagram` +
+`BackgammonCubeActions`.
 
 ### Render pipeline
 
@@ -201,15 +213,24 @@ consumers can pass `style`, `id`, `class`, etc. without modifying the component.
 
 `BackgammonPlayEntry` takes the same `DiagramRequest` / `DiagramOptions`
 shape as `BackgammonDiagram` plus an `EventCallback<Play> OnPlayCompleted`.
-Internally:
+The request is a checker-play decision's own: `DiagramRequest.ForDecision`
+from a `CheckerPlayDecision`, varied with whatever options the consumer
+draws it with. Internally:
 
-- `_state` holds a `MoveEntryState`, constructed from
-  `BoardState.FromMop(Request.Position.Mop)` and `Request.Decision.Dice`.
+- `_state` holds a `MoveEntryState`, constructed from the record's board
+  (`CheckerPlayDecision.Board`, a `BoardPosition`) and its roll in rolled
+  order (`Decision.Dice`).
 - `_renderedRequest` is the `DiagramRequest` actually handed to the inner
-  `BackgammonDiagram`; it is rebuilt on every state change via
-  `DiagramRequest.Builder.From(Request)` with `Mop` patched from
-  `_state.Current.ToMop()`. Other fields (names, cube, orientation) flow
-  through unchanged.
+  `BackgammonDiagram`: the request's own redraw of the entry's position,
+  `Request.WithWorkingBoard(_state.CurrentPosition, diceOrder)`, rebuilt on
+  every state change and used from the first render. **The board during
+  entry is not a decision record** (Hal, 2026-09-28, on
+  `halheinrich/backgammon#273`): the component builds no record, session or
+  display facts; the diagram library draws the working board with its
+  decision's presentation — names, source, cube, score and roll — derived
+  from the record, and keeps the request's options. A working board has no
+  analysis and no XGID, so a request's `Mode` and `ShowXgid` do not show
+  during entry.
 - Click handlers implement **one-click source-advance**: `OnPointClicked` /
   `OnBarClicked` route through
   `_state.TryAdvanceFrom(point, diePreference)` — a single click commits one
@@ -221,10 +242,11 @@ Internally:
   `OnPlayCompleted`.
 - The dice click (`OnDiceClicked`) is display/submit, not entry: on a complete
   play it fires `OnSubmitRequested`; on an incomplete play it toggles a
-  display-only dice swap (a no-op for doubles) that reorders only the rendered
-  dice — and thereby which die a one-click advance prefers. The incoming
-  `Request` and `MoveEntryState` are untouched, so the swap never disturbs the
-  reset key or in-progress entry.
+  display-only dice swap (a no-op for doubles) — the `DiceOrder` the working
+  board draws the roll in — that reorders only the rendered dice, and thereby
+  which die a one-click advance prefers. The incoming `Request` and
+  `MoveEntryState` are untouched, so the swap never disturbs the reset key or
+  in-progress entry.
 
 `AdditionalAttributes` is splatted onto `BackgammonPlayEntry`'s own outer
 `bg-play-entry` wrapper `div` — a separate wrapper above the inner
@@ -233,29 +255,41 @@ that style the play-entry widget target `bg-play-entry`; the inner diagram's
 splat surface is reached via the inner component's own parameter, which
 this component does not forward.
 
-### Reset semantics — value equality on `(Mop, Dice)`
+### Reset semantics — the decision's start, by value
 
-A fresh `MoveEntryState` is constructed only when the incoming `Request`'s
-starting `(Position.Mop, Decision.Dice)` differs value-wise from the
-previously cached pair. Re-passing a request with the same starting position
-and dice — even a distinct object reference — preserves any in-progress
-click state. Different starting position or dice triggers a reset.
+A fresh `MoveEntryState` is constructed only when the incoming decision's
+start — its board, compared by `BoardPosition`'s value equality (the one
+"same position"), and its roll in rolled order — differs from the start the
+current entry state was built from. The component keeps the start board; the
+roll half is the entry state's own `Die1` / `Die2`. Re-passing a request with
+the same start — even a distinct request, or a distinct record — preserves
+any in-progress click state, and the board is redrawn from the new request,
+so its options and presentation follow it. A different board or roll
+triggers a reset.
 
 This decouples reset behavior from object identity: consumers can rebuild a
-`DiagramRequest` for any reason (parent-state churn, attribute change, etc.)
-without losing mid-click progress, while genuinely advancing to a new
-problem unambiguously resets.
+`DiagramRequest` for any reason (parent-state churn, a settings change, etc.)
+without losing mid-click progress, while advancing to a problem with another
+board or roll resets.
 
-### Cube-decision guard
+### Decision-kind guard
 
-Cube decisions (signaled by `Decision.IsCube == true`) are not handled by
-`BackgammonPlayEntry`. `OnParametersSet` throws `NotImplementedException`
-naming the correct composition (`BackgammonDiagram` for the position,
-`BackgammonCubeActions` for the answer). The intent is to fail loudly at
-the contract boundary rather than silently render an unusable widget. There
-is no symmetric guard on the cube side: `BackgammonCubeActions` takes no
-request, so it has nothing to reject — routing by `Decision.IsCube` stays
-consumer-side.
+Only a checker-play decision is entered. `OnParametersSet` refuses any other
+request — a cube decision's, a board's (`DiagramRequest.ForBoard`), or a
+working board's handed back in — with an `ArgumentException` whose
+`ParamName` is `Request`, naming the correct composition (`BackgammonDiagram`
+for the position, `BackgammonCubeActions` for a cube answer). The intent is
+to fail loudly at the contract boundary rather than silently render an
+unusable widget. `ArgumentException` because the fault is the parameter's
+value, a request of the wrong kind.
+
+The refusal is a run-time one: a `DiagramRequest` carries its decision as
+`BgDecisionData`, not its kind, so the parameter's type cannot require a
+checker play. The kinded records make the routing a compile-time fact one
+step earlier, at the consumer, which holds a `CheckerPlayDecision` or a
+`CubeDecision` when it builds the request. There is no symmetric guard on
+the cube side: `BackgammonCubeActions` takes no request, so it has nothing to
+reject — routing by kind stays consumer-side.
 
 ### BackgammonCubeActions — markup and the one group
 
@@ -295,7 +329,7 @@ holding either renders nothing selected (see the value contract).
 a centred cube cannot be too good — gammons do not count until the cube
 turns, so the no-double equity never exceeds the cash — and the amendment
 rules the fourth pill withheld there (three pills). The fact is derived once,
-producer-side, as `BgDecisionData.CanBeTooGood`; the consumer passes it as
+producer-side, as `CubeDecision.CanBeTooGood`; the consumer passes it as
 `OfferTooGood`, and this component never re-derives it from rules fields it
 does not see. That is the only contextual change the row makes; the other
 three pairs are offered for every cube decision.
@@ -431,10 +465,23 @@ primitive (markup, hit-region overlay, callback wiring) and the point rects'
 `data-point` identity (present on all 24 and on nothing else, clickable by
 attribute selector, and in agreement with the render order it supersedes).
 `BackgammonPlayEntryTests`
-cover the play-entry contract: legal-completion firing, illegal no-ops,
-post-completion no-ops, undo round-trip via replay, value-equality reset on
-`(Mop, Dice)` change, identity preservation on equal `(Mop, Dice)`,
-cube-decision rejection. `BackgammonCubeActionsTests` cover the cube-actions
+cover the play-entry contract, every request built from a checker-play
+record by the producer's `TestRecords`: legal-completion firing, with the
+play reached asserted by identity from the starting position
+(`BoardState.IsSamePlay`), never by its moves; illegal no-ops;
+post-completion no-ops; undo round-trip via replay; the board drawn being
+the request's own `WithWorkingBoard` — at the start, after a click, after a
+dice swap, after undo, and from a re-passed request with new options;
+reset on a changed board or roll, and entry kept across another record or
+request with the same start; the refusal of a cube decision's, a board's
+and a working board's request, naming `Request`; `[EditorRequired]` on
+`Request` and `OnSubmitRequested` by reflection. Three wire tests drive the
+component from `EntryHost`, a parent that binds it through its own render
+tree by parameter name, as compiled Razor does, and renders its handlers'
+state: a completion reaching the parent whose re-render leaves the entry
+complete so the dice click submits through it; the parent advancing
+mid-entry to a new decision; and the parent rebuilding its request
+mid-entry without losing the committed move. `BackgammonCubeActionsTests` cover the cube-actions
 contract: render shape (one radio group with its accessible name, the root
 itself the group, four pills in the ruled order with their captions), the
 offerability gate from both sides (`OfferTooGood` false renders three pills
@@ -507,9 +554,12 @@ pitfalls.
 
 **Parameters:**
 
-- `DiagramRequest? Request` (required) — initial position and dice. Null
-  renders nothing. Cube decisions (`Decision.IsCube == true`) throw
-  `NotImplementedException`.
+- `DiagramRequest? Request` (**required**, `[EditorRequired]`) — the
+  checker-play decision's own request (`DiagramRequest.ForDecision` from a
+  `CheckerPlayDecision`, with any options); entry starts from its record's
+  board and roll, and the board drawn is its `WithWorkingBoard`. Null renders
+  nothing. Any other request — a cube decision's, a board's, a working
+  board's — throws `ArgumentException` (`ParamName` `Request`).
 - `DiagramOptions Options` — forwarded to the inner diagram.
 - `Dictionary<string, object>? AdditionalAttributes` — splatted onto the
   outer wrapper `div`.
@@ -517,8 +567,10 @@ pitfalls.
 **EventCallbacks:**
 
 - `EventCallback<Play> OnPlayCompleted` — fires once when the click sequence
-  assembles a complete legal `Play`. Does not fire for pass positions or
-  partial / illegal sequences.
+  assembles a complete legal `Play` (the entry state's `CompletedPlay`). Does
+  not fire for pass positions or partial / illegal sequences. How the play
+  compares with another is `Play`'s doc comment's to state (BgDataTypes_Lib),
+  not this repo's.
 - `EventCallback OnSubmitRequested` (**required**, `[EditorRequired]`) —
   parameterless; fires when the user clicks the dice on a *complete* play,
   signalling submit intent. The component stays submit-oblivious: it only
@@ -552,7 +604,7 @@ flow. See "Bounded-height contract" in Architecture and its Pitfalls.
   lock). Pairs with `Value` for `@bind-Value`.
 - `bool OfferTooGood` (**required**, `[EditorRequired]`) — whether the
   `TooGoodPass` pill is offered. Pass the producer's
-  `BgDecisionData.CanBeTooGood`; false renders the other three pairs only.
+  `CubeDecision.CanBeTooGood`; false renders the other three pairs only.
   The component never derives the fact.
 - `Dictionary<string, object>? AdditionalAttributes` — splatted onto the
   root `div` (`bg-cube-actions`).
@@ -571,10 +623,12 @@ and surrounding spacing.
 
 ## BackgammonPlayEntry — pitfalls
 
-- **Reset key is value-equality on `(Mop, Dice)`, not reference identity.**
-  Tests and consumers must rebuild a `DiagramRequest` with a *different*
-  starting position or dice to force a reset. Re-passing the same logical
-  problem — even a freshly built request instance — does not reset state.
+- **Reset key is the decision's start by value, not record or request
+  identity.** Tests and consumers must pass a decision with a *different*
+  board or roll to force a reset. Re-passing the same start — a freshly
+  built request, or another record on the same board with the same roll —
+  does not reset state. A consumer that wants a fresh entry on the same
+  start calls `UndoAll`.
 - **`UndoLast` / `UndoAll` invoke `StateHasChanged`** which requires the
   Blazor Dispatcher. Real consumers (button click handlers) are already on
   the Dispatcher; bUnit tests must wrap the call in `cut.InvokeAsync(...)`.
@@ -582,12 +636,16 @@ and surrounding spacing.
   exists, `MoveEntryState.IsComplete` is true at construction but the
   component does not emit a synthetic `OnPlayCompleted`. Consumers handle
   pass positions via their own skip-to-next-problem flow.
-- **Cube decisions are rejected at the contract boundary.** A `DiagramRequest`
-  with `Decision.IsCube == true` throws `NotImplementedException` from
+- **Only a checker-play decision's request is entered.** A cube decision's
+  request, a board's, or a working board's throws `ArgumentException` from
   `OnParametersSet`. Render cube positions with `BackgammonDiagram` and
   enter the answer with `BackgammonCubeActions`; there is no cube-side
-  guard to catch a misroute (the row is request-free), so the `IsCube`
-  branch lives with the consumer.
+  guard to catch a misroute (the row is request-free), so the kind branch
+  lives with the consumer, which holds the kinded record.
+- **Never hand the drawn request back in.** The inner diagram's request is a
+  working board's (`WithWorkingBoard`): it presents no decision, so passing
+  it as `Request` is refused, and it would restart entry from a mid-entry
+  board if it were not. Keep the decision's own request as the parameter.
 
 ## BackgammonCubeActions — pitfalls
 
@@ -603,7 +661,7 @@ and surrounding spacing.
   adopts the answer: the selection snaps back to `Value` on the next render
   pass. The consumer's own answer field remains the single source of truth.
 - **Clearing between problems is the consumer's job.** There is no request
-  and no Mop-keyed reset here — set `Value` to null when advancing to the
+  and no start-keyed reset here — set `Value` to null when advancing to the
   next problem, or the previous answer stays selected. (With `@bind-Value`,
   null the bound field.)
 - **`ValueChanged` and `OfferTooGood` are `[EditorRequired]`.** Without
@@ -619,7 +677,7 @@ and surrounding spacing.
   selection re-fires. A consumer wanting one-shot semantics advances to the
   next problem on the first callback.
 - **Never derive `OfferTooGood` here, and never withhold anything else.**
-  The offerability fact has one home (`BgDecisionData.CanBeTooGood`,
+  The offerability fact has one home (`CubeDecision.CanBeTooGood`,
   money-Jacoby-centred); restating it from rules fields in this component
   would be a second derivation site. Pass the fact through. Conversely the
   other three pairs are offered for every cube decision — nothing about a
@@ -630,8 +688,9 @@ and surrounding spacing.
   neighbouring pill; the tests pin that nothing lights.
 - **No play/cube routing guard.** The row takes no `DiagramRequest`, so it
   cannot reject a misrouted decision the way the old bundled wrapper did —
-  the `Decision.IsCube` branch is entirely the consumer's responsibility
-  (`BackgammonPlayEntry` still throws on cube decisions from its side).
+  the branch on the record's kind is entirely the consumer's responsibility
+  (`BackgammonPlayEntry` still refuses a cube decision's request from its
+  side).
 - **The radio group `name` is internal and instance-unique.** Don't rely on
   it (it changes per instance by design, so two rows on a page never
   cross-link browser-native mutual exclusion); select by the
@@ -780,7 +839,7 @@ and surrounding spacing.
   the pointer-events / stacking plumbing.
 - **Verify component layout under the new 16:9 aspect default.** Adapt, or
   pass `AspectPreset.Natural`, if needed.
-- **Two one-liners at the next touch.** `BackgammonPlayEntry`'s cube guard
-  throws `NotImplementedException` where `NotSupportedException` is the
-  semantically correct type; `PlayEntry.OnPlayCompleted` still lacks
-  `[EditorRequired]`.
+- **One one-liner at the next touch.** `BackgammonPlayEntry.OnPlayCompleted`
+  still lacks `[EditorRequired]`. (Its sibling, the cube guard's exception
+  type, went with the guard's rewrite for the decision kinds: an
+  `ArgumentException` — see "Decision-kind guard".)

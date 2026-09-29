@@ -106,7 +106,7 @@ public class BackgammonCubeActionsTests : BunitContext
     /// <summary>
     /// Too Good is offered by fact (SPEC-scoring §3, 2026-09-02 amendment,
     /// halheinrich/backgammon#187): the consumer passes the producer's
-    /// <c>BgDecisionData.CanBeTooGood</c>, and when it is <c>false</c> — a
+    /// <c>CubeDecision.CanBeTooGood</c>, and when it is <c>false</c> — a
     /// money position under Jacoby with the cube centred — the fourth pill is
     /// not rendered at all. The other three are the same three, in the same
     /// order, so nothing shifts under the user.

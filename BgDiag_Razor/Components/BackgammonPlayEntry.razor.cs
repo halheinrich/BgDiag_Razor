@@ -6,9 +6,21 @@ using BgMoveGen;
 namespace BgDiag_Razor.Components;
 
 /// <summary>
-/// Stateful one-click play entry. Wraps a view-only <see cref="BackgammonDiagram"/>
-/// and drives a <see cref="MoveEntryState"/> from its click events. Each completed
-/// <see cref="Play"/> is reported via <see cref="OnPlayCompleted"/>.
+/// Stateful one-click play entry for a checker-play decision. Wraps a view-only
+/// <see cref="BackgammonDiagram"/> and drives a <see cref="MoveEntryState"/> from
+/// its click events. Each completed <see cref="Play"/> is reported via
+/// <see cref="OnPlayCompleted"/>.
+///
+/// <para>
+/// <b>The decision and its board</b>: <see cref="Request"/> is the checker-play
+/// decision's own request (<see cref="DiagramRequest.ForDecision"/>, with whatever
+/// options the consumer draws it with). Entry starts from the record's board and
+/// roll, and the board drawn during entry is that request's own mid-entry redraw,
+/// <see cref="DiagramRequest.WithWorkingBoard"/> of the entry state's
+/// <see cref="MoveEntryState.CurrentPosition"/> — never a decision record, a
+/// session or display facts assembled here — so the names, score, cube and roll
+/// shown are the decision's, derived by the diagram library from the record.
+/// </para>
 ///
 /// <para>
 /// <b>One-click source-advance</b>: a single click on a checker's point (or the
@@ -50,20 +62,24 @@ namespace BgDiag_Razor.Components;
 ///
 /// <para>
 /// <b>State reset semantics</b>: a fresh <see cref="MoveEntryState"/> is constructed
-/// only when the incoming <see cref="Request"/>'s starting position
-/// (<c>Position.Mop</c>) or dice (<c>Decision.Dice</c>) differ value-wise from the
-/// previously cached pair. Re-passing a request with the same Mop and Dice — even a
-/// distinct object reference — preserves in-progress click state. Different Mop or
-/// Dice is treated as a new problem and resets.
+/// only when the incoming decision's start — its board, a <see cref="BoardPosition"/>
+/// compared by value, and its roll in rolled order — differs from the start the
+/// current entry state was built from. Re-passing a request with the same start —
+/// even a distinct request or record instance — preserves in-progress click state.
+/// A different board or roll is treated as a new problem and resets.
 /// </para>
 ///
 /// <para>
-/// <b>Cube decisions</b> (signalled by <c>Decision.IsCube == true</c>; in the data
-/// layer this also coincides with <c>Dice == [0, 0]</c>) are not supported by this
-/// component; constructing one throws <see cref="NotImplementedException"/>.
-/// Cube decisions have no click-by-click board state, so no entry wrapper exists
-/// for them: render the position with the view-only <see cref="BackgammonDiagram"/>
-/// and enter the answer with the free-standing <see cref="BackgammonCubeActions"/>.
+/// <b>Cube decisions</b> are not entered here: a request that presents no checker
+/// play — a cube decision's, a board's (<see cref="DiagramRequest.ForBoard"/>), or
+/// an already-redrawn working board's — is refused with an
+/// <see cref="ArgumentException"/> naming <see cref="Request"/>. A cube decision
+/// has no click-by-click board state, so no entry wrapper exists for it: render
+/// the position with the view-only <see cref="BackgammonDiagram"/> and enter the
+/// answer with the free-standing <see cref="BackgammonCubeActions"/>. The refusal
+/// is a run-time one because a <see cref="DiagramRequest"/> does not carry its
+/// decision's kind in its type; consumers route by the record's kind
+/// (<see cref="BgDecisionData.Match{TResult}"/>) before building the request.
 /// </para>
 ///
 /// <para>
@@ -90,11 +106,17 @@ public partial class BackgammonPlayEntry : ComponentBase
     // -----------------------------------------------------------------------
 
     /// <summary>
-    /// The decision to enter clicks against. Required (non-null to render anything).
-    /// The starting position and dice are read from <c>Position.Mop</c> and
-    /// <c>Decision.Dice</c>; other fields (names, cube state, orientation) flow
-    /// through to the inner diagram unchanged.
+    /// The checker-play decision to enter clicks against: its own request, built by
+    /// <see cref="DiagramRequest.ForDecision"/> from a <see cref="CheckerPlayDecision"/>
+    /// and varied with any options the consumer draws it with. Required (non-null to
+    /// render anything). Entry starts from the record's board and roll; the board
+    /// drawn is this request's <see cref="DiagramRequest.WithWorkingBoard"/>, so its
+    /// options and the decision's presentation reach the inner diagram unchanged.
     /// </summary>
+    /// <exception cref="ArgumentException">
+    /// Thrown while parameters are set when the request presents no checker-play
+    /// decision (see the class summary).
+    /// </exception>
     [Parameter, EditorRequired]
     public DiagramRequest? Request { get; set; }
 
@@ -105,7 +127,9 @@ public partial class BackgammonPlayEntry : ComponentBase
     /// <summary>
     /// Fires once when a complete <see cref="Play"/> has been assembled from the
     /// click sequence. Does not fire for pass positions or for partial / illegal
-    /// click sequences.
+    /// click sequences. The play is the entry state's
+    /// <see cref="MoveEntryState.CompletedPlay"/>; how a play is compared with
+    /// another is stated on <see cref="Play"/>, not here.
     /// </summary>
     [Parameter]
     public EventCallback<Play> OnPlayCompleted { get; set; }
@@ -135,89 +159,94 @@ public partial class BackgammonPlayEntry : ComponentBase
     //  Internal state
     // -----------------------------------------------------------------------
 
+    /// <summary>The checker-play decision <see cref="Request"/> presents; null exactly when it is.</summary>
+    private CheckerPlayDecision? _decision;
+
+    /// <summary>The entry in progress; null exactly when <see cref="Request"/> is.</summary>
     private MoveEntryState? _state;
-    private DiagramRequest? _renderedRequest;
-    private int[]? _cachedMop;
-    private int[]? _cachedDice;
 
     /// <summary>
-    /// Display-only flag: when set, the rendered request shows the dice in
-    /// reversed order. Purely a rendering tweak — it never touches the incoming
-    /// <see cref="Request"/> or <see cref="MoveEntryState"/>, so
-    /// <see cref="IsSameProblem"/> stays stable and in-progress entry survives.
-    /// Reset on every new problem so swap state never leaks across problems.
+    /// The board <see cref="_state"/> was started from — half of the reset key
+    /// (<see cref="IsSameStart"/>); the other half, the roll, is the entry
+    /// state's own <see cref="MoveEntryState.Die1"/> and <see cref="MoveEntryState.Die2"/>.
+    /// Set and cleared with <see cref="_state"/>.
     /// </summary>
-    private bool _diceSwapped;
+    private BoardPosition? _start;
+
+    /// <summary>The request handed to the inner diagram: <see cref="Request"/>'s working board.</summary>
+    private DiagramRequest? _renderedRequest;
+
+    /// <summary>
+    /// Display-only dice order: <see cref="DiceOrder.Reversed"/> after an odd number
+    /// of swaps. Purely a rendering tweak — it never touches the incoming
+    /// <see cref="Request"/> or <see cref="MoveEntryState"/>, so
+    /// <see cref="IsSameStart"/> stays stable and in-progress entry survives. Reset
+    /// on every new problem so swap state never leaks across problems.
+    /// </summary>
+    private DiceOrder _diceOrder;
 
     // -----------------------------------------------------------------------
     //  Lifecycle
     // -----------------------------------------------------------------------
 
     /// <summary>
-    /// Single render/reset hook. Clears all cached state on a null
-    /// <see cref="Request"/>, rejects cube decisions at the contract boundary
-    /// (see the class summary), and otherwise resets or preserves the
-    /// <see cref="MoveEntryState"/> by value-equality on the incoming
-    /// <c>(Mop, Dice)</c> pair before rebuilding the rendered request.
+    /// Single render/reset hook. Clears all state on a null <see cref="Request"/>,
+    /// refuses a request presenting no checker play at the contract boundary (see
+    /// the class summary), and otherwise resets or preserves the
+    /// <see cref="MoveEntryState"/> by the decision's start
+    /// (<see cref="IsSameStart"/>) before redrawing the working board.
     /// </summary>
     protected override void OnParametersSet()
     {
         if (Request is null)
         {
+            _decision = null;
             _state = null;
+            _start = null;
             _renderedRequest = null;
-            _cachedMop = null;
-            _cachedDice = null;
-            _diceSwapped = false;
+            _diceOrder = DiceOrder.AsRolled;
             return;
         }
 
-        if (Request.Decision.IsCube)
+        if (Request.Decision is not CheckerPlayDecision decision)
         {
-            throw new NotImplementedException(
-                "Cube decisions are not handled by BackgammonPlayEntry. " +
-                "Render the position with BackgammonDiagram and enter the answer " +
-                "with BackgammonCubeActions.");
+            throw new ArgumentException(
+                "BackgammonPlayEntry enters a checker play: its Request is a checker-play " +
+                "decision's own request (DiagramRequest.ForDecision). For a cube decision, " +
+                "render the position with BackgammonDiagram and enter the answer with " +
+                "BackgammonCubeActions; draw any other board with BackgammonDiagram.",
+                nameof(Request));
         }
 
-        var mop = Request.Position.Mop;
-        var dice = Request.Decision.Dice;
-
-        if (!IsSameProblem(mop, dice))
+        _decision = decision;
+        if (!IsSameStart(decision))
         {
-            _cachedMop = [.. mop];
-            _cachedDice = [.. dice];
-            _state = new MoveEntryState(BoardState.FromMop(mop), dice[0], dice[1]);
-            _diceSwapped = false;  // fresh problem — swap state must not leak across problems
+            var roll = decision.Decision.Dice;
+            _state = new MoveEntryState(decision.Board, roll[0], roll[1]);
+            _start = decision.Board;
+            _diceOrder = DiceOrder.AsRolled;  // fresh problem — swap state must not leak across problems
         }
 
-        RebuildRenderedRequest();
+        RedrawWorkingBoard();
     }
 
-    private bool IsSameProblem(IReadOnlyList<int> mop, IReadOnlyList<int> dice)
-    {
-        if (_cachedMop is null || _cachedDice is null) return false;
-        if (_cachedMop.Length != mop.Count || _cachedDice.Length != dice.Count) return false;
-        for (int i = 0; i < mop.Count; i++)
-            if (_cachedMop[i] != mop[i]) return false;
-        for (int i = 0; i < dice.Count; i++)
-            if (_cachedDice[i] != dice[i]) return false;
-        return true;
-    }
+    /// <summary>
+    /// Whether <paramref name="decision"/> starts where the current entry state
+    /// did: the same board, by <see cref="BoardPosition"/>'s value equality, and
+    /// the same roll in rolled order. Record and request identity play no part.
+    /// </summary>
+    private bool IsSameStart(CheckerPlayDecision decision) =>
+        _state is not null
+        && _start == decision.Board
+        && _state.Die1 == decision.Decision.Dice[0]
+        && _state.Die2 == decision.Decision.Dice[1];
 
-    private void RebuildRenderedRequest()
-    {
-        if (Request is null || _state is null)
-        {
-            _renderedRequest = null;
-            return;
-        }
-        var b = DiagramRequest.Builder.From(Request);
-        b.Mop = [.. _state.Current.ToMop()];
-        if (_diceSwapped)
-            b.Dice = [b.Dice[1], b.Dice[0]];  // display-only reorder; Request/state untouched
-        _renderedRequest = b.Build();
-    }
+    /// <summary>
+    /// Rebuilds the inner diagram's request as <see cref="Request"/>'s own redraw of
+    /// the entry state's current position, in the displayed dice order.
+    /// </summary>
+    private void RedrawWorkingBoard() =>
+        _renderedRequest = Request!.WithWorkingBoard(_state!.CurrentPosition, _diceOrder);
 
     // -----------------------------------------------------------------------
     //  Click routing
@@ -235,30 +264,28 @@ public partial class BackgammonPlayEntry : ComponentBase
     private Task HandleTrayClick() => BearOffMax();
 
     /// <summary>
-    /// The rendered dice order, leftmost die first — reflecting the finding-2 display
-    /// swap. This is the only place "leftmost die" is known; the model stays
-    /// die-order-agnostic and one-click advance prefers whichever die the user
-    /// currently sees on the left.
+    /// The rendered dice order, leftmost die first — the roll as the entry state
+    /// holds it (in rolled order), in <see cref="_diceOrder"/>, the order the
+    /// working board draws it in. This is the only place "leftmost die" is known;
+    /// the model stays die-order-agnostic and one-click advance prefers whichever
+    /// die the user currently sees on the left.
     /// </summary>
-    private IReadOnlyList<int> DicePreference()
-    {
-        var dice = Request!.Decision.Dice;
-        return _diceSwapped ? [dice[1], dice[0]] : [dice[0], dice[1]];
-    }
+    private IReadOnlyList<int> DicePreference(MoveEntryState state) =>
+        _diceOrder == DiceOrder.Reversed ? [state.Die2, state.Die1] : [state.Die1, state.Die2];
 
     /// <summary>
     /// Point click — advance-then-make. An own checker on <paramref name="point"/>
     /// advances from it (E1); if that is illegal the point holds no own checker, so
     /// the click falls through to make-the-point on it (E2). The advance-first
     /// ordering plus the producer's own-occupied guard keep the dispatch board-blind
-    /// — the component never inspects <c>_state.Current</c>. Illegal from both is a
-    /// no-op.
+    /// — the component never inspects <see cref="MoveEntryState.CurrentPosition"/>.
+    /// Illegal from both is a no-op.
     /// </summary>
     private async Task PointClick(int point)
     {
         if (_state is null) return;
 
-        var outcome = _state.TryAdvanceFrom(point, DicePreference());
+        var outcome = _state.TryAdvanceFrom(point, DicePreference(_state));
         if (outcome == ClickOutcome.Illegal)
             outcome = _state.TryMakePoint(point);
 
@@ -269,7 +296,7 @@ public partial class BackgammonPlayEntry : ComponentBase
     private async Task Advance(int point)
     {
         if (_state is null) return;
-        await ApplyOutcome(_state.TryAdvanceFrom(point, DicePreference()));
+        await ApplyOutcome(_state.TryAdvanceFrom(point, DicePreference(_state)));
     }
 
     /// <summary>
@@ -289,16 +316,16 @@ public partial class BackgammonPlayEntry : ComponentBase
 
     /// <summary>
     /// Shared tail for every one-click action: a no-op on
-    /// <see cref="ClickOutcome.Illegal"/>; otherwise re-renders the board and, only
-    /// on <see cref="ClickOutcome.PlayCompleted"/>, fires <see cref="OnPlayCompleted"/>.
+    /// <see cref="ClickOutcome.Illegal"/>; otherwise redraws the working board and,
+    /// only on <see cref="ClickOutcome.PlayCompleted"/>, fires <see cref="OnPlayCompleted"/>.
     /// A <see cref="ClickOutcome.MoveCommitted"/> (including a doubles make that
-    /// leaves dice) just re-renders and waits for the next click.
+    /// leaves dice) just redraws and waits for the next click.
     /// </summary>
     private async Task ApplyOutcome(ClickOutcome outcome)
     {
         if (outcome == ClickOutcome.Illegal) return;
 
-        RebuildRenderedRequest();
+        RedrawWorkingBoard();
 
         if (outcome == ClickOutcome.PlayCompleted && _state!.CompletedPlay is { } play)
         {
@@ -309,7 +336,7 @@ public partial class BackgammonPlayEntry : ComponentBase
     /// <summary>
     /// Dice click. On a complete play it signals submit intent via
     /// <see cref="OnSubmitRequested"/> (this component never submits itself). On an
-    /// incomplete play it toggles the display-only dice swap and re-renders —
+    /// incomplete play it toggles the display-only dice order and redraws —
     /// except for doubles, where reversing equal dice changes nothing, so it's a
     /// no-op (no pointless render).
     /// </summary>
@@ -324,10 +351,10 @@ public partial class BackgammonPlayEntry : ComponentBase
         }
 
         // Incomplete: swap is a visual no-op for doubles.
-        if (_cachedDice is { Length: 2 } d && d[0] == d[1]) return;
+        if (_decision!.Dice.IsDouble) return;
 
-        _diceSwapped = !_diceSwapped;
-        RebuildRenderedRequest();
+        _diceOrder = _diceOrder == DiceOrder.AsRolled ? DiceOrder.Reversed : DiceOrder.AsRolled;
+        RedrawWorkingBoard();
         StateHasChanged();
     }
 
@@ -344,7 +371,7 @@ public partial class BackgammonPlayEntry : ComponentBase
     {
         if (_state is null) return;
         _state.UndoLast();
-        RebuildRenderedRequest();
+        RedrawWorkingBoard();
         StateHasChanged();
     }
 
@@ -357,7 +384,7 @@ public partial class BackgammonPlayEntry : ComponentBase
     {
         if (_state is null) return;
         _state.UndoAll();
-        RebuildRenderedRequest();
+        RedrawWorkingBoard();
         StateHasChanged();
     }
 }
