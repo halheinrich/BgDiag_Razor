@@ -1,12 +1,12 @@
 /* Cube-decision radio pills. Scoped to BackgammonCubeActions — styles the one
-   radio group rendered by the .razor: the reachable cube verdicts as whole
-   pairs (No double, Double / Take, Double / Pass, and Too good when the
-   position admits it). Each option is a <label> wrapping its own
+   radio group rendered by the .razor: the four cube answers, each captioned
+   at its decision by the label home, in its full or (on the host's call) its
+   short form. Each option is a <label> wrapping its own
    <input type="radio"> + caption; the input is visually hidden (see below),
    so the pill itself is the whole visible affordance.
 
-   The four-pair shape is ruled by the umbrella's SPEC-scoring.md §3 as amended
-   2026-09-02 (halheinrich/backgammon#187). One flex row at one gap: there is
+   The four answers are the umbrella's SPEC-scoring.md §3 (amended on
+   halheinrich/backgammon#326). One flex row at one gap: there is
    one group, so there is no inter-group spacing to signal and no nested row
    to carry it. (A visible group caption was left out deliberately — it would
    re-spend the width this row is measured against; the accessible name lives
