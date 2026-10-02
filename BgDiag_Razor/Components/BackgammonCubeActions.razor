@@ -7,7 +7,7 @@
             <input type="radio"
                    name="@_groupName"
                    value="@label"
-                   aria-label="@label"
+                   aria-label="@AccessibleNameOf(answer)"
                    checked="@selected"
                    @onchange="() => HandleSelected(answer)" />
             @CaptionOf(answer)

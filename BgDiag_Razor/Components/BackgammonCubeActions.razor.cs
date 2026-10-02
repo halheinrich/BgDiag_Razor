@@ -34,11 +34,12 @@ namespace BgDiag_Razor.Components;
 /// <para>
 /// <b>The short form is the host's call.</b> The umbrella's
 /// <c>SPEC-quiz-view.md</c> §4 ("The action row under quiz navigation") rules
-/// when the labels abbreviate and that the full label stays each pill's
-/// accessible name and tooltip. Only the host knows what else shares its row,
-/// so the host decides and sets <see cref="ShortLabels"/>; this component
-/// measures nothing and guesses no width. Either form keeps the full label as
-/// the radio's <c>aria-label</c> and the pill's <c>title</c>, and the native
+/// when the labels abbreviate, and what each pill's tooltip and accessible
+/// name are in each form. Only the host knows what else shares its row, so
+/// the host decides and sets <see cref="ShortLabels"/>; this component
+/// measures nothing and guesses no width. The pill's <c>title</c> is the full
+/// label in both forms; the radio's <c>aria-label</c> is composed from the
+/// label home's two labels as that section rules for the form. The native
 /// radio group's semantics are the same in both.
 /// </para>
 ///
@@ -187,10 +188,11 @@ public partial class BackgammonCubeActions : ComponentBase
     /// <para>
     /// The host's call, not this component's: the labels abbreviate only when
     /// the row cannot fit them (SPEC-quiz-view §4), and only the host knows
-    /// what else shares the row. In either form the full label stays the
-    /// radio's accessible name (<c>aria-label</c>) and the pill's tooltip
-    /// (<c>title</c>). Switching the form relabels the pills at the next
-    /// render; it selects nothing and fires no <see cref="ValueChanged"/>.
+    /// what else shares the row. The pill's tooltip (<c>title</c>) is the full
+    /// label in either form; the radio's accessible name (<c>aria-label</c>)
+    /// follows SPEC-quiz-view §4's rule for each form. Switching the form
+    /// relabels the pills at the next render; it selects nothing and fires no
+    /// <see cref="ValueChanged"/>.
     /// </para>
     /// </summary>
     [Parameter]
@@ -217,11 +219,24 @@ public partial class BackgammonCubeActions : ComponentBase
     /// The visible caption of <paramref name="answer"/> at
     /// <see cref="Decision"/>: its short label in the short form, its full
     /// label otherwise. The full label is the markup's to place as the
-    /// accessible name and tooltip in both forms.
+    /// tooltip in both forms.
     /// </summary>
     private string CaptionOf(CubeAnswer answer) =>
         ShortLabels
             ? CubeLabels.ShortLabel(answer, Decision)
+            : CubeLabels.Label(answer, Decision);
+
+    /// <summary>
+    /// The radio's accessible name for <paramref name="answer"/> at
+    /// <see cref="Decision"/>, per <c>SPEC-quiz-view.md</c> §4: the full label
+    /// in the full form; in the short form the visible short label followed
+    /// by the full label in parentheses, so the name contains the text shown
+    /// and carries the full one. Both labels are the label home's; only the
+    /// joining is composed here.
+    /// </summary>
+    private string AccessibleNameOf(CubeAnswer answer) =>
+        ShortLabels
+            ? $"{CubeLabels.ShortLabel(answer, Decision)} ({CubeLabels.Label(answer, Decision)})"
             : CubeLabels.Label(answer, Decision);
 
     // -----------------------------------------------------------------------

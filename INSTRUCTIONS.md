@@ -317,14 +317,16 @@ this row without an edit to it, and there is no second spelling or
 derivation here to drift from the first.
 
 **The short form is the host's call.** `SPEC-quiz-view.md` §4 ("The action
-row under quiz navigation") rules when cube labels abbreviate, and that the
-full name stays each button's accessible name and tooltip. Only the host
-knows what else shares its row (Submit, the navigation icons, the tail), so
-the host decides: it sets `ShortLabels`, and the row measures nothing and
-guesses no width. In both forms each radio carries the full label as its
-`aria-label` and each pill carries it as its `title`, so the accessible name
-and tooltip never depend on the form, and the native radio group is the same
-group either way. When the host passes another decision or the other form,
+row under quiz navigation") rules when cube labels abbreviate, and what each
+button's tooltip and accessible name are in each form. Only the host knows
+what else shares its row (Submit, the navigation icons, the tail), so the
+host decides: it sets `ShortLabels`, and the row measures nothing and
+guesses no width. Each pill's `title` is the full label in both forms. Each
+radio's `aria-label` follows that section's rule for the form, composed in
+the code-behind (`AccessibleNameOf`) from the label home's `ShortLabel` and
+`Label` at the decision, so the row joins the two labels and spells neither.
+The native radio group is the same group either way. When the host passes
+another decision or the other form,
 every caption, accessible name and tooltip follows at the next render; the
 change selects nothing and fires no `ValueChanged`.
 
@@ -494,10 +496,11 @@ centred, with and without the Jacoby rule):
   `Too good` where gammons are possible and `No double / Pass` where they are
   not, the other three unchanged; and every caption, accessible name and
   tooltip being the label home's at the decision, in both forms.
-- **The short form:** short captions with the full label as each radio's
-  `aria-label` and each pill's `title`, still one native group; the full
-  form's name and tooltip the full label; the full form the default, the
-  parameter optional by reflection.
+- **The short form:** short captions with the full label as each pill's
+  `title` and each radio's `aria-label` the exact short-form name of every
+  answer at both decisions, still one native group; the full form's name and
+  tooltip the full label; the full form the default, the parameter optional
+  by reflection.
 - **Parameter changes:** another decision (gammons possible to not, and back)
   and the other form (full to short, and back) relabel the fourth pill's
   caption, accessible name and tooltip, keep the selected answer selected,
@@ -627,9 +630,9 @@ flow. See "Bounded-height contract" in Architecture and its Pitfalls.
   `CubeLabels`, and the row reads nothing else from it. Null throws
   `ArgumentNullException` (`ParamName` `Decision`).
 - `bool ShortLabels` — the host's choice of the short labels
-  (`SPEC-quiz-view.md` §4); default `false`, the full labels. The full label
-  stays each radio's accessible name (`aria-label`) and each pill's tooltip
-  (`title`) in both forms.
+  (`SPEC-quiz-view.md` §4); default `false`, the full labels. Each pill's
+  tooltip (`title`) is the full label in both forms; each radio's accessible
+  name (`aria-label`) is as that section rules for the form.
 - `Dictionary<string, object>? AdditionalAttributes` — splatted onto the
   root `div` (`bg-cube-actions`).
 
@@ -719,9 +722,10 @@ and surrounding spacing.
   labels depends on everything else in the host's row, which this component
   cannot see; the host measures and sets `ShortLabels`
   (`SPEC-quiz-view.md` §4). Don't add a width threshold, a media query or a
-  measurement to the component, and don't drop the full label from
-  `aria-label` / `title` in the short form — the short caption alone is not
-  the answer's name.
+  measurement to the component. Don't drop the full label from `title` or
+  `aria-label` in the short form, and don't drop the visible short label
+  from `aria-label` either: the name must contain the text shown
+  (`SPEC-quiz-view.md` §4).
 - **A `Value` outside the four is a caller bug, not a fallback case.** It
   renders nothing selected. Don't "help" by remapping such a value onto a
   neighbouring pill; the tests pin that nothing lights.

@@ -55,6 +55,21 @@ public class BackgammonCubeActionsTests : BunitContext
     private static readonly string[] ShortWhereGammonsNotPossible =
         ["ND", "D/T", "D/P", "NP"];
 
+    /// <summary>
+    /// The short form's accessible names where gammons are possible: the
+    /// visible short label first, then the full label in parentheses
+    /// (SPEC-quiz-view §4, amended 2026-10-02).
+    /// </summary>
+    private static readonly string[] ShortFormNamesWhereGammonsPossible =
+        ["ND (No double)", "D/T (Double / Take)", "D/P (Double / Pass)", "TG (Too good)"];
+
+    /// <summary>The short form's accessible names where gammons are not possible.</summary>
+    private static readonly string[] ShortFormNamesWhereGammonsNotPossible =
+        ["ND (No double)", "D/T (Double / Take)", "D/P (Double / Pass)", "NP (No double / Pass)"];
+
+    private static string[] ShortFormNamesAt(bool gammonsPossible) =>
+        gammonsPossible ? ShortFormNamesWhereGammonsPossible : ShortFormNamesWhereGammonsNotPossible;
+
     private static string[] FullLabelsAt(bool gammonsPossible) =>
         gammonsPossible ? FullWhereGammonsPossible : FullWhereGammonsNotPossible;
 
@@ -207,10 +222,11 @@ public class BackgammonCubeActionsTests : BunitContext
     /// Every caption, accessible name and tooltip is the label home's, read at
     /// the row's decision: the caption is <see cref="CubeLabels.Label(CubeAnswer, CubeDecision)"/>
     /// in the full form and <see cref="CubeLabels.ShortLabel(CubeAnswer, CubeDecision)"/>
-    /// in the short form, and the accessible name and tooltip are the full
-    /// label in both. This pins the wiring — which member the row asks, for
-    /// which answer, at which decision — not the wording, which the literal
-    /// tables above pin as what a user reads.
+    /// in the short form; the tooltip is the full label in both; and the
+    /// accessible name is the full label in the full form and the two joined,
+    /// short first, in the short form. This pins the wiring — which member the
+    /// row asks, for which answer, at which decision — not the wording, which
+    /// the literal tables above pin as what a user reads and hears.
     /// </summary>
     [Theory]
     [MemberData(nameof(GammonFactsAndForms))]
@@ -220,12 +236,12 @@ public class BackgammonCubeActionsTests : BunitContext
         var cut = RenderRow(decision: decision, shortLabels: shortLabels);
 
         var full = Answers.Select(a => CubeLabels.Label(a, decision)).ToList();
-        var captions = shortLabels
-            ? Answers.Select(a => CubeLabels.ShortLabel(a, decision)).ToList()
-            : full;
+        var shortForm = Answers.Select(a => CubeLabels.ShortLabel(a, decision)).ToList();
 
-        Assert.Equal(captions, Captions(cut));
-        Assert.Equal(full, AccessibleNames(cut));
+        Assert.Equal(shortLabels ? shortForm : full, Captions(cut));
+        Assert.Equal(
+            shortLabels ? shortForm.Zip(full, (s, f) => $"{s} ({f})").ToList() : full,
+            AccessibleNames(cut));
         Assert.Equal(full, Tooltips(cut));
     }
 
@@ -243,18 +259,20 @@ public class BackgammonCubeActionsTests : BunitContext
 
     // -----------------------------------------------------------------------
     //  The short form — the host's call (SPEC-quiz-view §4, "The action row
-    //  under quiz navigation"): short captions, the full label kept as each
-    //  radio's accessible name and each pill's tooltip, full by default.
+    //  under quiz navigation", amended 2026-10-02): short captions, each
+    //  radio's accessible name the short label then the full one in
+    //  parentheses (so it contains the text shown), each pill's tooltip the
+    //  full label, full by default.
     // -----------------------------------------------------------------------
 
     [Theory]
     [MemberData(nameof(GammonFacts))]
-    public void ShortForm_ShowsTheShortLabels_KeepingTheFullLabelAsAccessibleNameAndTooltip(bool gammonsPossible)
+    public void ShortForm_ShowsTheShortLabels_NamedShortThenFull_WithTheFullLabelAsTooltip(bool gammonsPossible)
     {
         var cut = RenderRow(decision: DecisionAt(gammonsPossible), shortLabels: true);
 
         Assert.Equal(ShortLabelsAt(gammonsPossible), Captions(cut));
-        Assert.Equal(FullLabelsAt(gammonsPossible), AccessibleNames(cut));
+        Assert.Equal(ShortFormNamesAt(gammonsPossible), AccessibleNames(cut));
         Assert.Equal(FullLabelsAt(gammonsPossible), Tooltips(cut));
 
         // Still the one native radio group: four real radios under one name.
@@ -299,33 +317,41 @@ public class BackgammonCubeActionsTests : BunitContext
     //  next render; the change leaves Value alone and fires no ValueChanged.
     // -----------------------------------------------------------------------
 
-    [Fact]
-    public void ChangingTheDecision_RelabelsTheFourthPill_SelectingNothingAndFiringNothing()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ChangingTheDecision_RelabelsTheFourthPill_SelectingNothingAndFiringNothing(bool shortLabels)
     {
         var fired = 0;
         var cut = Render<BackgammonCubeActions>(p => p
             .Add(c => c.Value, CubeAnswer.NoDoublePass)
             .Add(c => c.Decision, WithGammons)
+            .Add(c => c.ShortLabels, shortLabels)
             .Add(c => c.ValueChanged, (CubeAnswer? _) => fired++));
 
         var fourth = IndexOf(CubeAnswer.NoDoublePass);
-        Assert.Equal("Too good", Captions(cut)[fourth]);
+        void AssertFourthReads(string caption, string name, string tooltip)
+        {
+            Assert.Equal(caption, Captions(cut)[fourth]);
+            Assert.Equal(name, AccessibleNames(cut)[fourth]);
+            Assert.Equal(tooltip, Tooltips(cut)[fourth]);
+            Assert.Equal([caption], SelectedCaptions(cut));
+        }
+
+        if (shortLabels) AssertFourthReads("TG", "TG (Too good)", "Too good");
+        else AssertFourthReads("Too good", "Too good", "Too good");
 
         // Gammons possible → not possible.
         cut.Render(p => p.Add(c => c.Decision, WithoutGammons));
 
-        Assert.Equal("No double / Pass", Captions(cut)[fourth]);
-        Assert.Equal("No double / Pass", AccessibleNames(cut)[fourth]);
-        Assert.Equal("No double / Pass", Tooltips(cut)[fourth]);
-        Assert.Equal(["No double / Pass"], SelectedCaptions(cut));
+        if (shortLabels) AssertFourthReads("NP", "NP (No double / Pass)", "No double / Pass");
+        else AssertFourthReads("No double / Pass", "No double / Pass", "No double / Pass");
 
         // ...and back.
         cut.Render(p => p.Add(c => c.Decision, WithGammons));
 
-        Assert.Equal("Too good", Captions(cut)[fourth]);
-        Assert.Equal("Too good", AccessibleNames(cut)[fourth]);
-        Assert.Equal("Too good", Tooltips(cut)[fourth]);
-        Assert.Equal(["Too good"], SelectedCaptions(cut));
+        if (shortLabels) AssertFourthReads("TG", "TG (Too good)", "Too good");
+        else AssertFourthReads("Too good", "Too good", "Too good");
 
         Assert.Equal(CubeAnswer.NoDoublePass, cut.Instance.Value);
         Assert.Equal(0, fired);
@@ -346,7 +372,7 @@ public class BackgammonCubeActionsTests : BunitContext
         cut.Render(p => p.Add(c => c.ShortLabels, true));
 
         Assert.Equal(ShortWhereGammonsNotPossible, Captions(cut));
-        Assert.Equal(FullWhereGammonsNotPossible, AccessibleNames(cut));
+        Assert.Equal(ShortFormNamesWhereGammonsNotPossible, AccessibleNames(cut));
         Assert.Equal(FullWhereGammonsNotPossible, Tooltips(cut));
         Assert.Equal(["NP"], SelectedCaptions(cut));
 
