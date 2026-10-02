@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components;
 using BackgammonDiagram_Lib;
 using BackgammonDiagram_Lib.Rendering;
 

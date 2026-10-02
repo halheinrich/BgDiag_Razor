@@ -363,9 +363,7 @@ public partial class BackgammonPlayEntry : ComponentBase
     // -----------------------------------------------------------------------
 
     /// <summary>
-    /// Roll back the most recent change. If a source is selected with no move
-    /// pending, clears the selection. Otherwise undoes the last committed move.
-    /// No-op if neither holds.
+    /// Undo the last committed move. No-op if none has been committed.
     /// </summary>
     public void UndoLast()
     {
@@ -376,9 +374,9 @@ public partial class BackgammonPlayEntry : ComponentBase
     }
 
     /// <summary>
-    /// Restore the initial position. Clears any source selection and any committed
-    /// moves. Allowed even after the play has completed; the consumer can choose
-    /// to expose this as a "redo from start" affordance.
+    /// Restore the initial position, discarding every committed move. Allowed
+    /// even after the play has completed; the consumer can choose to expose
+    /// this as a "redo from start" affordance.
     /// </summary>
     public void UndoAll()
     {
