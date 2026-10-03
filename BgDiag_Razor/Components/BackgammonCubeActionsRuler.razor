@@ -1,0 +1,6 @@
+<div class="bg-cube-actions-ruler" @attributes="AdditionalAttributes" aria-hidden="true" inert>
+    @foreach (var row in _rows)
+    {
+        @BackgammonCubeActions.PillRow(null, row)
+    }
+</div>

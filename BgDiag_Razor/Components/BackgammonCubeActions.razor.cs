@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using Microsoft.AspNetCore.Components;
 using BackgammonDiagram_Lib;
 using BgDataTypes_Lib;
@@ -113,6 +114,21 @@ namespace BgDiag_Razor.Components;
 /// </para>
 ///
 /// <para>
+/// <b>One markup source for the row and its inert copy.</b> The pill row's
+/// markup is one internal template, <see cref="PillRow"/>, which this row
+/// draws itself with and <see cref="BackgammonCubeActionsRuler"/> draws every
+/// state of the row with, so a host can measure the row at its widest before
+/// any cube decision (the umbrella's <c>SPEC-quiz-view.md</c> §4, "One budget
+/// from the outset"). Written in this component's file, the template carries
+/// its scoped-style attribute wherever it renders, so this component's
+/// stylesheet reaches the copy's pills as it reaches these. What is this
+/// row's alone is its wiring: the radio group's role and name on the root,
+/// a radio in each pill, and each caption chosen at <see cref="Decision"/>.
+/// Style the pills through their classes, never through that wiring, which
+/// the copy does not have.
+/// </para>
+///
+/// <para>
 /// <b>Instance-unique radio group name.</b> Browsers enforce radio mutual
 /// exclusion by <c>name</c> document-wide, so the name is generated per
 /// instance and two rows on one page never cross-link. It is internal —
@@ -210,10 +226,63 @@ public partial class BackgammonCubeActions : ComponentBase
     //  which the type states is the order the four are offered in
     //  (SPEC-scoring §3's column order). The order is the type's; this is no
     //  option table of the row's own, and the wording of each answer is the
-    //  label home's, asked per pill by the markup.
+    //  label home's, asked per pill at the decision.
     // -----------------------------------------------------------------------
 
-    private static readonly CubeAnswer[] _offeredAnswers = Enum.GetValues<CubeAnswer>();
+    /// <summary>
+    /// The answers the row offers, in the order it offers them: every
+    /// <see cref="CubeAnswer"/> member, in the type's declaration order. The
+    /// inert copy (<see cref="BackgammonCubeActionsRuler"/>) draws its pills
+    /// in this order too, so the two rows cannot disagree about it.
+    /// </summary>
+    internal static readonly ImmutableArray<CubeAnswer> OfferedAnswers = [.. Enum.GetValues<CubeAnswer>()];
+
+    // -----------------------------------------------------------------------
+    //  The pill row — its markup is PillRow, in the .razor, shared with the
+    //  inert copy. What is the live row's own is the wiring it fills in: the
+    //  group attributes on the root, a radio in each pill, and the choice of
+    //  each caption at the decision.
+    // -----------------------------------------------------------------------
+
+    /// <summary>
+    /// One pill, as <see cref="PillRow"/> draws it: what it shows, its
+    /// tooltip, whether it is drawn selected, and the live row's radio, which
+    /// the inert copy does not have.
+    /// </summary>
+    /// <param name="Caption">The label the pill shows.</param>
+    /// <param name="Tooltip">The pill's <c>title</c>: its full label, in
+    /// both forms.</param>
+    /// <param name="Selected">Whether the pill is drawn selected.</param>
+    /// <param name="Radio">The live row's radio for this pill; <c>null</c> in
+    /// the copy, which holds no control.</param>
+    internal readonly record struct Pill(string Caption, string Tooltip, bool Selected, RenderFragment? Radio);
+
+    /// <summary>
+    /// The live row's group wiring, placed on the pill row's root after its
+    /// class: the radio group's role and accessible name, then the host's
+    /// <see cref="AdditionalAttributes"/>, last so that a host attribute of
+    /// the same name wins, as the splat always has.
+    /// </summary>
+    private IEnumerable<KeyValuePair<string, object>> GroupWiring =>
+        RadioGroup.Concat(AdditionalAttributes ?? Enumerable.Empty<KeyValuePair<string, object>>());
+
+    /// <summary>The radio group's role and its accessible name.</summary>
+    private static readonly ImmutableArray<KeyValuePair<string, object>> RadioGroup =
+        [new("role", "radiogroup"), new("aria-label", "Cube decision")];
+
+    /// <summary>
+    /// The live row's pills at <see cref="Decision"/>: each offered answer
+    /// captioned in the host's form (<see cref="CaptionOf"/>), its full label
+    /// as the tooltip, drawn selected where <see cref="Value"/> is that
+    /// answer, and wired with its radio.
+    /// </summary>
+    private IEnumerable<Pill> LivePills() =>
+        OfferedAnswers.Select(answer =>
+        {
+            var label = CubeLabels.Label(answer, Decision);
+            var selected = Value == answer;
+            return new Pill(CaptionOf(answer), label, selected, RadioOf(answer, label, selected));
+        });
 
     /// <summary>
     /// The visible caption of <paramref name="answer"/> at

@@ -5,6 +5,16 @@
    <input type="radio"> + caption; the input is visually hidden (see below),
    so the pill itself is the whole visible affordance.
 
+   It styles the row's inert copy too (BackgammonCubeActionsRuler), which a
+   host measures for the row's widest: the copy is drawn by the same markup,
+   PillRow in the .razor, and so carries this stylesheet's scope. The copy
+   has the row's classes but not its wiring — no role or aria-label on the
+   root, no radio in a pill — so every rule that sets a width keys on the
+   classes alone, or the copy would measure a different row. The selected
+   state is the bg-cube-action-selected class, not the radio's checked state,
+   and :hover and :focus-visible change only paint, since the copy can take
+   neither state.
+
    The four answers are the umbrella's SPEC-scoring.md §3 (amended on
    halheinrich/backgammon#326). One flex row at one gap: there is
    one group, so there is no inter-group spacing to signal and no nested row

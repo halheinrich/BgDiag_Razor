@@ -24,7 +24,9 @@ https://github.com/halheinrich/BgDiag_Razor — branch `main`.
   `DiceOrder`, `DiagramOptions`, `DiagramRenderer`, `BoardHitRegions`,
   `SvgViewBox`, `HitRect`, and `CubeLabels`, the one spelling of a cube
   answer, full and short — `BackgammonCubeActions` labels every pill through
-  it, at the decision. Referenced as a project reference, not a package.
+  it, at the decision, and `BackgammonCubeActionsRuler` draws every spelling
+  it lists without one (`CubeLabels.Spellings`, each a
+  `CubeAnswerSpelling`). Referenced as a project reference, not a package.
 - **BgDataTypes_Lib** — `CheckerPlayDecision` (the decision kind play entry
   takes), `CubeDecision` (the decision kind the cube row answers),
   `BoardPosition` (readonly struct, the position value), `Play` (struct),
@@ -53,7 +55,9 @@ Test-only:
 
 `BackgammonCubeActions` consumes `CubeAnswer` and `CubeDecision` from
 `BgDataTypes_Lib` and `CubeLabels` from `BackgammonDiagram_Lib`, and nothing
-else from either. No `BgMoveGen` use — cube decisions have no checker-move
+else from either. Its inert copy, `BackgammonCubeActionsRuler`, consumes
+`CubeAnswer` and `CubeLabels.Spellings` with its `CubeAnswerSpelling`, and no
+decision at all. No `BgMoveGen` use — cube decisions have no checker-move
 state to drive — and none of the diagram library's rendering: the answer row
 is board-free.
 
@@ -63,7 +67,7 @@ Two projects under `BgDiag_Razor.slnx`, governed by repo-root
 `Directory.Build.props` (TFM, `TreatWarningsAsErrors`, XML doc generation)
 and `Directory.Packages.props` (Central Package Management).
 
-**`BgDiag_Razor/`** — the Razor class library: three components under
+**`BgDiag_Razor/`** — the Razor class library: four components under
 `Components/`, each a `.razor` markup file with its code-behind, and a scoped
 `.razor.css` where it styles its own markup. It ships no static assets.
 
@@ -78,12 +82,19 @@ and `Directory.Packages.props` (Central Package Management).
   group of the four `CubeAnswer`s, labelled at the decision, under a
   controlled-value contract.
   Its scoped CSS is the pill styling, whose horizontal metrics are
-  load-bearing at the consumer (see the file's header).
+  load-bearing at the consumer (see the file's header). Its markup file
+  holds the pill row's markup, which its inert copy draws too.
+- **`BackgammonCubeActionsRuler`** — the cube answer row's inert copy, for a
+  host to measure: every state the row can show, drawn by the row's own
+  markup, in a box as wide as the widest. Its scoped CSS is that box alone.
 
 **`BgDiag_Razor.Tests/`** — bUnit over xUnit, one test class per component:
 rendering and event callbacks for the diagram, the play-entry and
-cube-actions contracts for the other two. A fourth class pins the library's
-trim posture (see "Thin wrapper, by design").
+cube-actions contracts, and the cube row's inert copy. A fifth class pins the
+library's trim posture (see "Thin wrapper, by design"). Three helpers serve
+the cube classes: `CubeDecisions` (the two decisions both answer),
+`ComponentSources` (a component's sources as text, comments stripped) and
+`CompiledStylesheet` (the selectors of the compiled scoped-CSS bundle).
 
 ## Architecture
 
@@ -107,7 +118,7 @@ SDK-emitted `IsTrimmable` assembly metadata; the analyzer switch leaves no
 such trace, so the build is its only check. The test project carries neither
 setting: it ships nowhere.
 
-### Three components: view-only, play-entry, cube-actions
+### Four components: view-only, play-entry, cube-actions, and its inert copy
 
 `BackgammonDiagram` is the **view-only primitive** — given a `DiagramRequest`
 it renders the position and surfaces click events. It holds no
@@ -143,6 +154,12 @@ board-bundled layout just to get a row of radios. Consumers route by the
 record's kind (`BgDecisionData.Match` / `Switch`): a `CheckerPlayDecision`
 → `BackgammonPlayEntry`; a `CubeDecision` → `BackgammonDiagram` +
 `BackgammonCubeActions`.
+
+Beside the three, `BackgammonCubeActionsRuler` is the cube answer row's
+**inert copy**, which a host measures and nobody answers. It takes no
+decision, so it is not routed to: a host renders it once, before any
+problem, to size its row (see "BackgammonCubeActionsRuler — the inert copy"
+below).
 
 ### Render pipeline
 
@@ -335,6 +352,21 @@ Each option is a `<label class="bg-cube-action">` wrapping its own
 `bg-cube-action-selected` for a visible selected state, and an answer
 therefore lights exactly one pill.
 
+**One markup source for the row and its inert copy.** The pill row's
+markup, the `bg-cube-actions` root and each `bg-cube-action` pill with its
+tooltip and caption, is one internal template, `PillRow` (with `PillMarkup`
+for each pill), written in `BackgammonCubeActions.razor`. The live row draws
+itself with it and fills in its wiring: on the root, the group's role and
+accessible name and then the host's splat (`GroupWiring`), and in each pill
+its radio (`RadioOf`). `BackgammonCubeActionsRuler` draws every state of the
+row with the same template and no wiring. Scoped CSS reaches only the markup
+written in its own component's file, through the scoped-style attribute the
+compiler writes onto that markup; matching class names would not carry it.
+Because the template is written here, it carries this component's attribute
+wherever it renders, so this stylesheet reaches the copy's pills exactly as
+it reaches the live row's, and a change to the pill's look reaches both. The
+live row renders exactly the markup it rendered before the template existed.
+
 The radio itself is **visually hidden but not removed** — the pill's own
 border, fill and weight are the selected affordance, so the native dot stops
 being painted. The technique is the transparent native control stretched
@@ -347,18 +379,21 @@ hit target. The keyboard focus ring moves from the dot to the pill
 (`:focus-visible`, on `outline` so it cannot widen the row).
 
 The offered order is `CubeAnswer`'s own, read once from the type
-(`Enum.GetValues<CubeAnswer>()`) into a private static; it is not a table of
-the row's. No cube caption is spelled anywhere in this repo's component code;
-the markup asks `CubeLabels` per pill, at `Decision`.
+(`Enum.GetValues<CubeAnswer>()`) into an internal static, `OfferedAnswers`,
+which the inert copy draws its pills in too; it is not a table of the row's.
+No cube caption is spelled anywhere in this repo's component code; the
+code-behind asks `CubeLabels` per pill, at `Decision` (`LivePills`).
 
 The radio `name` is generated per instance — same-name radios are mutually
 exclusive document-wide, so a fixed name would cross-link two rows on one
 page. It is internal; consumers address the group by its `aria-label` or the
 `bg-cube-actions` class.
 
-`AdditionalAttributes` is splatted onto the root `bg-cube-actions` `div`.
-Consumers that style the row target `bg-cube-actions`; the pills are
-`bg-cube-action`.
+`AdditionalAttributes` is splatted onto the root `bg-cube-actions` `div`,
+after its class and the group's role and name, so a host attribute of the
+same name wins. Consumers that style the row target `bg-cube-actions`; the
+pills are `bg-cube-action`. The inert copy's rows and pills carry the same
+classes, being the same markup.
 
 **Sizing posture** (deliberate, documented intent): the pills are compact
 and inline-flow-friendly — the root is an inline-flex row that takes only
@@ -383,7 +418,9 @@ Double / Pass, selected, and 419.3px at most over any selection, since
 weight 600 widens the selected caption). The label home's wording is what
 keeps it there: No double spells no implied take, and with a response
 spelled on every pill the same four measured 509.2px. The fourth answer's
-longer label, No double / Pass, and the short form are not measured here.
+longer label, No double / Pass, and the short form are not recorded here:
+a host measures every state live, under the fonts rendering, from the inert
+copy (`BackgammonCubeActionsRuler`, below).
 Whether the row clears the consumer's one-line contract, and the width at
 which the host switches to the short form, are the consumer's measurements
 to take on its final row (`SPEC-quiz-view.md` §4); these numbers are its
@@ -425,6 +462,61 @@ keeps no state.
 The component emits the raw answer only; it does not encode which answer is
 correct. What the answer costs at the decision (`CubeDecision.CostOf`) is the
 quiz layer's to ask.
+
+### BackgammonCubeActionsRuler — the inert copy
+
+The umbrella's `SPEC-quiz-view.md` §4, "One budget from the outset", has a
+host size its action row from one width budget that holds the cube pills at
+their widest, measured under the fonts rendering, before any cube decision
+is on screen; that section states the rule and the chain that meets it. The
+live row cannot supply that width: it is labelled at its decision, and the
+fourth answer's label is that decision's reading.
+`BackgammonCubeActionsRuler` takes no decision. A host renders it and
+measures it.
+
+**What it draws.** One copy of the row for each state the live row can show
+in the ruler's form (`ShortLabels`, as on the live row). Each state takes one
+spelling of each answer, from every combination of the spellings
+`CubeLabels.Spellings` lists for the offered answers. It is drawn once with
+nothing selected and once with each pill selected in turn, because the
+selected pill is drawn heavier. Today only the fourth answer has two spellings
+(Too good / TG, and No double / Pass / NP), so a form has ten copies. No state
+is assumed to be the widest, and the fonts decide. Every combination is drawn
+because the label home lists what an answer can read, not which readings
+occur together. With one answer of two readings the two sets are the same; if
+more answers had several, the copy could only err wide. Each copy's caption is
+the spelling's short or full label in the form, and its tooltip is the full
+label, as on the live row. The copy chooses that caption from a spelling
+itself, and never the way the live row does, at a decision.
+
+**What a host measures: the root's width.** The root,
+`div.bg-cube-actions-ruler`, stacks the copies in one column, each at its own
+width (`display: inline-grid; justify-items: start`), so it is exactly as wide
+as the widest copy. Its `width` and `min-width` are both `max-content`, so no
+parent can stretch it past that or shrink it below, and no copy wraps inside
+it, even in a zero-width host. Its height is not a row's, because the copies
+stack. A host that needs both forms renders a ruler for each. It re-measures
+when the fonts load or change, like any live measurement; an observer on the
+root sees every change.
+
+**The live row's markup and stylesheet.** Each copy is drawn by
+`BackgammonCubeActions`' own `PillRow` template with no wiring (see "One
+markup source" above). It therefore carries that component's scoped-style
+attribute, and every rule of that stylesheet reaches it as it reaches the
+live row: the gap, the pill's padding, border and line-height, and the
+selected weight. The ruler's own stylesheet has one rule, its box, and
+touches no copy.
+
+**Inert.** The root carries `aria-hidden="true"` and `inert`, written after
+the host's splat, so no host attribute can undo either. Its stylesheet keeps
+it unpainted (`visibility: hidden`), which keeps its layout and so its width.
+Inside it there is only the pill row's markup: no input or other control, and
+no name, id, role, tabindex or event handler. So even a browser that ignores
+`inert` finds nothing to focus or click, nothing raises an event, and nothing
+joins or shadows the live row's radio group when both are on one page. It is
+still laid out, which is what makes it measurable. Keeping it out of the
+page's flow, clipping it so it cannot widen the page, and placing it where it
+inherits the live row's fonts are the host's tasks.
 
 ### Bounded-height contract — the board slot
 
@@ -541,12 +633,42 @@ hue, fill, weight). The text-pinning technique is BgQuiz's
 (`MainLayoutTests`' narrow-desktop band); comments are stripped before
 matching — in the C# and Razor sources as well as the stylesheet — so prose
 naming a thing can neither satisfy nor fail an assertion about it.
+`BackgammonCubeActionsRulerTests` cover the inert copy, against the live
+row at the same two decisions (`CubeDecisions`):
+
+- **What it draws:** in each form, one copy for every state of the row and
+  no other: every combination of the label home's spellings, each with
+  nothing selected and with each pill selected, derived from
+  `CubeLabels.Spellings`. A literal pin checks the fourth answer's two
+  readings, selected and not, in both forms; another checks that the full
+  form is the default.
+- **No decision:** its parameters are the form and the splat alone. Its
+  source draws from `CubeLabels.Spellings`, spells no label and labels
+  nothing at a decision, and the live row's source never reads `Spellings`.
+  The two share how a pill is drawn, not how it is captioned.
+- **Inert:** `aria-hidden` and `inert` on the root, which a host's splat
+  cannot undo. Inside it are only rows and pills, carrying a class, a tooltip
+  and the scoped-style attribute and nothing else, and there is no event
+  handler anywhere. Its stylesheet's one rule keeps it unpainted and as wide
+  as its widest copy (read as text).
+- **One source:** for every state of the live row (both decisions, both
+  forms, every value), the copy showing that state is the live row's markup
+  less its wiring, character for character. Every selector of the compiled
+  scoped-CSS bundle reaches each copy element exactly where it reaches the
+  live one. `CompiledStylesheet` reads the bundle through the static web
+  assets manifest the build places beside the test assembly, and AngleSharp
+  matches the selectors, so a rule keyed to the live row's wiring (its role,
+  or its radio's checked state) fails here.
+- **One page:** with a ruler of each form beside it, the live row stays the
+  page's one radio group. Its radios are the only bearers of its name, its
+  markup is what it draws alone, and a selection fires through it once.
+
 `BgDiagRazorTrimPostureTests` holds the one trim-posture pin described under
 "Thin wrapper, by design".
 
 ## Public API
 
-All three components live in namespace `BgDiag_Razor.Components`.
+All four components live in namespace `BgDiag_Razor.Components`.
 
 ### `BackgammonDiagram`
 
@@ -650,6 +772,36 @@ back, so the play-entry-style `UndoLast` / `UndoAll` does not apply.
 **Sizing contract:** content-sized, inline-flow-friendly, no external
 margins — see "Sizing posture" in Architecture. The consumer owns placement
 and surrounding spacing.
+
+### `BackgammonCubeActionsRuler`
+
+The cube answer row's inert copy, for a host to measure before any cube
+decision is on screen (`SPEC-quiz-view.md` §4, "One budget from the
+outset"). See "BackgammonCubeActionsRuler — the inert copy" in Architecture.
+
+**Parameters:**
+
+- `bool ShortLabels` — the label form to measure; default `false`, the full
+  labels. The same choice, under the same name, as
+  `BackgammonCubeActions.ShortLabels`; a host that needs both forms renders
+  one ruler for each.
+- `Dictionary<string, object>? AdditionalAttributes` — splatted onto the
+  root `div` (`bg-cube-actions-ruler`), before its `aria-hidden` and
+  `inert`, which it cannot undo. The way to give the ruler a host's own
+  handle, such as a `data-` attribute.
+
+No decision, no value, no callback: the ruler answers nothing and raises
+no event.
+
+**Imperative methods:** none.
+
+**Measuring contract:** the root's rendered width (e.g.
+`getBoundingClientRect().width`) is the widest the live row can be in the
+form, under the fonts at the ruler's place in the document. The host
+reads nothing else, no copy inside it and not its height. The host places it
+where it inherits the live row's font, keeps it out of the page's flow and
+clipped (for example inside an absolutely positioned, zero-size,
+`overflow: hidden` box), and re-measures when the fonts load or change.
 
 ## BackgammonPlayEntry — pitfalls
 
@@ -764,6 +916,56 @@ and surrounding spacing.
   fresh measurement first, and don't "restore" the dot for symmetry with
   some other control. Conversely, don't shave the *block* padding to save
   more width — that trades a layout win for a tap-target regression.
+- **The pill row's markup is shared with the inert copy: edit it in
+  `PillRow`, and draw both rows from it.** A pill written anywhere else, in
+  another component's file or as the copy's own markup, carries another
+  component's scoped-style attribute or none, and this stylesheet does not
+  reach it, however exactly its class names match. The copy would then
+  measure a different row, and nothing on screen would show it.
+- **Style the pills through their classes, never through the row's
+  wiring.** The copy is the live row's markup less its wiring: no `role` or
+  `aria-label` on the root, no radio in a pill. A rule keyed to the wiring,
+  such as `[role="radiogroup"] .bg-cube-action`, or the selected state
+  written as `.bg-cube-action:has(input:checked)`, reaches the live row
+  alone, so whatever width it sets is missing from the copy's measurement.
+  The selected state is the `bg-cube-action-selected` class for this reason
+  as well. Pinned against the compiled stylesheet.
+- **Hover and focus stay paint-only.** The copy can be neither hovered nor
+  focused, so it measures neither state. A width-bearing declaration under
+  `:hover` or `:focus-visible` (weight, padding, border width) would widen
+  the live row past the budget its host measured. Today they change only
+  colours and the outline; no test pins that.
+
+## BackgammonCubeActionsRuler — pitfalls
+
+- **Measure the root, and nothing inside it.** The root's width is the
+  answer. The copies inside it are the row's states in no promised order,
+  and the root's height is not a row's.
+- **Place it where the live row's fonts are.** Like the live row, the copy
+  inherits its font from where it sits; a ruler under other font settings
+  measures another row. Host styles that reach the live row through an
+  ancestor of the host's (e.g. `.action-row .bg-cube-action`) must reach the
+  ruler too, or the two widths part.
+- **Host selectors keyed on the row's classes match the copies too.** The
+  copies carry `bg-cube-actions` and `bg-cube-action`; they must, being the
+  same markup. A host or test that finds the live pills by class scopes its
+  selector to the live row's container, or excludes
+  `.bg-cube-actions-ruler`.
+- **Hide it with clipping, never with `display: none`.** It is already
+  unpainted and inert. `display: none` on it or any ancestor leaves it no
+  box, and every width it reports is zero. Keep it laid out, out of the
+  page's flow, inside a clipping box, so its width cannot widen the page.
+- **Don't splat `class` or `style` onto it.** A splatted `class` replaces
+  `bg-cube-actions-ruler`, the box rule that makes its width the widest
+  copy's, and a `style` can override that sizing. Give it a `data-`
+  attribute to find it by.
+- **Never caption the live row from `Spellings`, nor the copy at a
+  decision.** The two rows share how a pill is drawn, not how it is
+  captioned. The live row labels each answer at its decision; the copy draws
+  every spelling and labels nothing. Pinned on both sources.
+- **Nothing in its own stylesheet may reach the copies.** That stylesheet's
+  one rule is the box. A `::deep` rule, or any rule on the copies' rows or
+  pills, would make the copy's geometry differ from the live row's. Pinned.
 
 ## BackgammonDiagram — pitfalls
 

@@ -1,12 +1,11 @@
 using System.Reflection;
-using System.Runtime.CompilerServices;
-using System.Text.RegularExpressions;
 using Bunit;
 using BackgammonDiagram_Lib;
 using BgDiag_Razor.Components;
 using BgDataTypes_Lib;
-using BgDataTypes_Lib.TestSupport;
 using Microsoft.AspNetCore.Components;
+using static BgDiag_Razor.Tests.ComponentSources;
+using static BgDiag_Razor.Tests.CubeDecisions;
 
 namespace BgDiag_Razor.Tests;
 
@@ -78,29 +77,8 @@ public class BackgammonCubeActionsTests : BunitContext
 
     private static int IndexOf(CubeAnswer answer) => Array.IndexOf(Answers, answer);
 
-    /// <summary>
-    /// A cube decision where gammons are or are not possible. The two differ
-    /// only in the gammon fact: both are a money session with the cube
-    /// centred, and only the Jacoby rule, which closes gammons at a centred
-    /// cube, differs. The fact is the producer's
-    /// (<see cref="CubeDecision.GammonsPossible"/>); the fixture refuses to
-    /// hand a test a decision that disagrees with what it asked for.
-    /// </summary>
-    private static CubeDecision DecisionWhereGammons(bool possible)
-    {
-        var decision = TestRecords.Cube(
-            position: TestRecords.Position(session: TestRecords.MoneySession(isJacoby: !possible)));
-        if (decision.GammonsPossible != possible)
-            throw new InvalidOperationException(
-                $"The fixture asked for gammons possible = {possible}; the record says {decision.GammonsPossible}.");
-        return decision;
-    }
-
-    private static readonly CubeDecision WithGammons = DecisionWhereGammons(possible: true);
-    private static readonly CubeDecision WithoutGammons = DecisionWhereGammons(possible: false);
-
-    private static CubeDecision DecisionAt(bool gammonsPossible) =>
-        gammonsPossible ? WithGammons : WithoutGammons;
+    // The two decisions every test here answers (WithGammons, WithoutGammons,
+    // DecisionAt) are CubeDecisions', shared with the inert copy's tests.
 
     /// <summary>The group's radios, in render order.</summary>
     private static IReadOnlyList<AngleSharp.Dom.IElement> Radios(
@@ -860,59 +838,18 @@ public class BackgammonCubeActionsTests : BunitContext
     }
 
     // -----------------------------------------------------------------------
-    //  Source-as-text helpers
+    //  Source-as-text helpers — the reading itself (comments stripped, Rule)
+    //  is ComponentSources', shared with the inert copy's tests.
     // -----------------------------------------------------------------------
 
     /// <summary>
     /// The component's code-behind and markup with comments stripped.
     /// </summary>
-    private static string ComponentCode() =>
-        StripComments(ComponentSource("BackgammonCubeActions.razor.cs"))
-        + StripComments(ComponentSource("BackgammonCubeActions.razor"));
+    private static string ComponentCode() => Code(nameof(BackgammonCubeActions));
 
     /// <summary>
     /// The component's scoped stylesheet with comments stripped, so prose that
     /// names a declaration cannot be mistaken for the declaration itself.
     /// </summary>
-    private static string CubeActionsCss() =>
-        StripComments(ComponentSource("BackgammonCubeActions.razor.css"));
-
-    /// <summary>
-    /// <paramref name="source"/> with block comments and <c>//</c> line
-    /// comments (XML doc comments included) removed.
-    /// </summary>
-    private static string StripComments(string source) =>
-        Regex.Replace(
-            Regex.Replace(source, @"/\*.*?\*/", "", RegexOptions.Singleline),
-            @"//.*?$", "", RegexOptions.Multiline);
-
-    /// <summary>
-    /// The declaration block for <paramref name="selector"/>, tolerating a
-    /// trailing selector list (the selected-state rule is doubled so it outranks
-    /// <c>:hover</c>). Fails the test outright when the rule has gone missing —
-    /// an absent rule must never read as a vacuously passing assertion.
-    /// </summary>
-    private static string Rule(string css, string selector)
-    {
-        var match = Regex.Match(
-            css, Regex.Escape(selector) + @"\s*(,[^{]*)?\{(?<body>[^}]*)\}");
-
-        Assert.True(match.Success,
-            $"the `{selector}` rule is missing from BackgammonCubeActions.razor.css.");
-        return match.Groups["body"].Value;
-    }
-
-    /// <summary>
-    /// The text of one of the component's source files, resolved from this test
-    /// file's own compile-time location. Scoped CSS is compiled into a bundle at
-    /// build time and Razor sources are compiled away entirely, so the source
-    /// tree is the only thing there is to read.
-    /// </summary>
-    private static string ComponentSource(
-        string fileName, [CallerFilePath] string thisFile = "")
-    {
-        var testDir = Path.GetDirectoryName(thisFile)!;
-        return File.ReadAllText(Path.GetFullPath(Path.Combine(
-            testDir, "..", "BgDiag_Razor", "Components", fileName)));
-    }
+    private static string CubeActionsCss() => Css(nameof(BackgammonCubeActions));
 }

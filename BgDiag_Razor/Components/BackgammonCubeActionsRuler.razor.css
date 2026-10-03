@@ -1,0 +1,21 @@
+/* The inert copy's own box. Scoped to BackgammonCubeActionsRuler, so it
+   reaches only the root: the copies inside it are drawn by
+   BackgammonCubeActions' pill-row markup and styled by that component's
+   stylesheet, as the live row is. Nothing here may touch the copies, or
+   their geometry would no longer be the live row's.
+
+   The box is the measurement: one column of copies, each at its own width
+   (justify-items: start), the column as wide as the widest of them. It is
+   sized to its content wherever the host puts it — max-content as its width
+   so no parent stretches it, and as its minimum so no flex or grid parent
+   shrinks it, either of which would misreport the widest row or wrap the
+   copies inside it. It is never painted (visibility: hidden), which keeps
+   its layout, and so its width, intact. */
+
+.bg-cube-actions-ruler {
+    display: inline-grid;
+    justify-items: start;
+    width: max-content;
+    min-width: max-content;
+    visibility: hidden;
+}

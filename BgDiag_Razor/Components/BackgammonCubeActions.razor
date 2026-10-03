@@ -1,16 +1,50 @@
-<div class="bg-cube-actions" role="radiogroup" aria-label="Cube decision" @attributes="AdditionalAttributes">
-    @foreach (var answer in _offeredAnswers)
-    {
-        var label = CubeLabels.Label(answer, Decision);
-        var selected = Value == answer;
-        <label class="bg-cube-action@(selected ? " bg-cube-action-selected" : "")" title="@label">
-            <input type="radio"
-                   name="@_groupName"
-                   value="@label"
-                   aria-label="@AccessibleNameOf(answer)"
-                   checked="@selected"
-                   @onchange="() => HandleSelected(answer)" />
-            @CaptionOf(answer)
-        </label>
-    }
-</div>
+@using BgDataTypes_Lib
+
+@PillRow(GroupWiring, LivePills())
+
+@code {
+    /// <summary>
+    /// The pill row's markup: the one source of every element that bears on
+    /// the row's geometry, for this row and for its inert copy,
+    /// <see cref="BackgammonCubeActionsRuler"/>. Written in this file, it
+    /// carries this component's scoped-style attribute wherever it renders,
+    /// so this component's stylesheet reaches the copy's pills as it reaches
+    /// the live row's: by the markup they share, not by matching class names.
+    /// The live row fills its two wiring slots, <paramref name="groupWiring"/>
+    /// and each <see cref="Pill.Radio"/>; the copy leaves both empty.
+    /// </summary>
+    /// <param name="groupWiring">The attributes that make the row a radio
+    /// group, placed on its root after its class; <c>null</c> for the copy.</param>
+    /// <param name="pills">The pills, in the order the row offers them.</param>
+    internal static RenderFragment PillRow(
+        IEnumerable<KeyValuePair<string, object>>? groupWiring, IEnumerable<Pill> pills) =>
+        @<div class="bg-cube-actions" @attributes="groupWiring">
+            @foreach (var pill in pills)
+            {
+                @PillMarkup(pill)
+            }
+        </div>;
+
+    /// <summary>
+    /// One pill's markup, for <see cref="PillRow"/>: the pill, drawn selected
+    /// or not, its tooltip, its radio when it has one, and its caption.
+    /// </summary>
+    private static RenderFragment PillMarkup(Pill pill) =>
+        @<label class="bg-cube-action@(pill.Selected ? " bg-cube-action-selected" : "")" title="@pill.Tooltip">
+            @pill.Radio
+            @pill.Caption
+        </label>;
+
+    /// <summary>
+    /// The live row's radio for <paramref name="answer"/>, the wiring its
+    /// pill carries: one control of the instance's one group, named for
+    /// assistive technology, emitting its answer when chosen.
+    /// </summary>
+    private RenderFragment RadioOf(CubeAnswer answer, string label, bool selected) =>
+        @<input type="radio"
+                name="@_groupName"
+                value="@label"
+                aria-label="@AccessibleNameOf(answer)"
+                checked="@selected"
+                @onchange="() => HandleSelected(answer)" />;
+}
