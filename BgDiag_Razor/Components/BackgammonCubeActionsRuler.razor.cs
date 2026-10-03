@@ -45,9 +45,13 @@ namespace BgDiag_Razor.Components;
 /// </para>
 ///
 /// <para>
-/// <b>Inert.</b> The root is hidden from assistive technology
-/// (<c>aria-hidden</c>) and <c>inert</c>, after the host's attributes so a
-/// host attribute cannot undo either, and its stylesheet keeps it unpainted.
+/// <b>Inert, and its box its own.</b> The root is hidden from assistive
+/// technology (<c>aria-hidden</c>) and <c>inert</c>, and its stylesheet keeps
+/// it unpainted and sized to its widest copy. Its class, <c>aria-hidden</c>
+/// and <c>inert</c> are written after the host's attributes, so no host
+/// attribute can undo them; and a host <c>class</c> or <c>style</c> is
+/// refused outright (see <see cref="AdditionalAttributes"/>), since either
+/// could only restyle the box whose width is the measurement.
 /// It holds no input, no control, no name, no id and no event handler, so
 /// nothing in it can take focus or a pointer, raise an event, or join the
 /// live row's radio group. It is still laid out, which is what makes it
@@ -74,8 +78,18 @@ public partial class BackgammonCubeActionsRuler : ComponentBase
     /// <summary>
     /// Catch-all for arbitrary HTML attributes (e.g. a <c>data-</c> attribute
     /// a host finds the ruler by) splatted onto the root <c>div</c>
-    /// (<c>bg-cube-actions-ruler</c>). They cannot undo the root's
+    /// (<c>bg-cube-actions-ruler</c>). They cannot undo the root's class,
     /// <c>aria-hidden</c> or <c>inert</c>, which come after them.
+    ///
+    /// <para>
+    /// A <c>class</c> or a <c>style</c> is not accepted, in any letter case:
+    /// the root's box is the measurement, and a host class beside the
+    /// ruler's own, or an inline style, could only restyle it — stretch or
+    /// shrink it, paint it — and the host would read a wrong width with no
+    /// error. Either is refused with an <see cref="ArgumentException"/> whose
+    /// <c>ParamName</c> is <c>AdditionalAttributes</c>, rather than dropped
+    /// silently.
+    /// </para>
     /// </summary>
     [Parameter(CaptureUnmatchedValues = true)]
     public Dictionary<string, object>? AdditionalAttributes { get; set; }
@@ -86,8 +100,36 @@ public partial class BackgammonCubeActionsRuler : ComponentBase
 
     private ImmutableArray<ImmutableArray<Pill>> _rows = [];
 
-    /// <summary>Draws the copies for the form <see cref="ShortLabels"/> names.</summary>
-    protected override void OnParametersSet() => _rows = RowsIn(ShortLabels);
+    /// <summary>
+    /// Refuses a host attribute that would restyle the root's box, then draws
+    /// the copies for the form <see cref="ShortLabels"/> names.
+    /// </summary>
+    /// <exception cref="ArgumentException">
+    /// <see cref="AdditionalAttributes"/> holds a <c>class</c> or a
+    /// <c>style</c>.
+    /// </exception>
+    protected override void OnParametersSet()
+    {
+        if (AdditionalAttributes?.Keys.FirstOrDefault(IsBoxStyling) is { } refused)
+        {
+            throw new ArgumentException(
+                $"BackgammonCubeActionsRuler takes no `{refused}` from a host: its root's box is the " +
+                "measurement, and a host class or style could only restyle it. Find the ruler by a " +
+                "data- attribute instead.",
+                nameof(AdditionalAttributes));
+        }
+
+        _rows = RowsIn(ShortLabels);
+    }
+
+    /// <summary>
+    /// Whether a host attribute named <paramref name="name"/> would restyle
+    /// the root's box: a <c>class</c> or a <c>style</c>, whose names HTML
+    /// reads in any letter case.
+    /// </summary>
+    private static bool IsBoxStyling(string name) =>
+        name.Equals("class", StringComparison.OrdinalIgnoreCase)
+        || name.Equals("style", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// One copy of the row for each state the live row can show in the form:

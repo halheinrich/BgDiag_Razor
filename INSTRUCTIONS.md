@@ -94,7 +94,8 @@ cube-actions contracts, and the cube row's inert copy. A fifth class pins the
 library's trim posture (see "Thin wrapper, by design"). Three helpers serve
 the cube classes: `CubeDecisions` (the two decisions both answer),
 `ComponentSources` (a component's sources as text, comments stripped) and
-`CompiledStylesheet` (the selectors of the compiled scoped-CSS bundle).
+`CompiledStylesheet` (the rules of the compiled scoped-CSS bundle, and the
+cascade of their declared values onto a rendered element).
 
 ## Architecture
 
@@ -507,9 +508,13 @@ live row: the gap, the pill's padding, border and line-height, and the
 selected weight. The ruler's own stylesheet has one rule, its box, and
 touches no copy.
 
-**Inert.** The root carries `aria-hidden="true"` and `inert`, written after
-the host's splat, so no host attribute can undo either. Its stylesheet keeps
-it unpainted (`visibility: hidden`), which keeps its layout and so its width.
+**Inert, and its box its own.** The root carries its class,
+`aria-hidden="true"` and `inert`, all written after the host's splat, so no
+host attribute can undo any of them. A host `class` or `style`, in any letter
+case, is not accepted at all: either could only restyle the box whose width is
+the measurement, so it is refused with an `ArgumentException` naming
+`AdditionalAttributes` rather than dropped silently. Its stylesheet keeps it
+unpainted (`visibility: hidden`), which keeps its layout and so its width.
 Inside it there is only the pill row's markup: no input or other control, and
 no name, id, role, tabindex or event handler. So even a browser that ignores
 `inert` finds nothing to focus or click, nothing raises an event, and nothing
@@ -517,6 +522,15 @@ joins or shadows the live row's radio group when both are on one page. It is
 still laid out, which is what makes it measurable. Keeping it out of the
 page's flow, clipping it so it cannot widen the page, and placing it where it
 inherits the live row's fonts are the host's tasks.
+
+**States it cannot take.** Being inert and unpainted, the copy is never
+hovered, focused or active, so it draws none of those states. Its width is
+therefore the live row's widest only while those states change no geometry:
+a rule keyed to `:hover`, `:focus`, `:focus-visible`, `:focus-within` or
+`:active` may change paint, or repeat what the element already has without
+the state (the selected-and-hovered rule repeats the selected weight), but
+never set a geometry-bearing property to anything else. Pinned by
+`StatesTheCopyCannotTake_ChangeNoGeometry`.
 
 ### Bounded-height contract — the board slot
 
@@ -646,8 +660,9 @@ row at the same two decisions (`CubeDecisions`):
   source draws from `CubeLabels.Spellings`, spells no label and labels
   nothing at a decision, and the live row's source never reads `Spellings`.
   The two share how a pill is drawn, not how it is captioned.
-- **Inert:** `aria-hidden` and `inert` on the root, which a host's splat
-  cannot undo. Inside it are only rows and pills, carrying a class, a tooltip
+- **Inert:** `aria-hidden`, `inert` and the ruler's class on the root,
+  which a host's splat cannot undo, and a host `class` or `style` refused
+  in any letter case, naming `AdditionalAttributes`. Inside it are only rows and pills, carrying a class, a tooltip
   and the scoped-style attribute and nothing else, and there is no event
   handler anywhere. Its stylesheet's one rule keeps it unpainted and as wide
   as its widest copy (read as text).
@@ -659,6 +674,20 @@ row at the same two decisions (`CubeDecisions`):
   assets manifest the build places beside the test assembly, and AngleSharp
   matches the selectors, so a rule keyed to the live row's wiring (its role,
   or its radio's checked state) fails here.
+- **States it cannot take:** for every element of the live row in every
+  state the copy draws, the compiled stylesheet's declared value of each
+  geometry-bearing property is cascaded (AngleSharp's selector specificity,
+  then source order) once with no dynamic state and once with each of
+  `:hover`, `:focus`, `:focus-visible`, `:focus-within` and `:active`
+  holding, and with all of them at once; the two must agree. A state holds
+  by taking its pseudo-class out of each selector. Geometry-bearing is every
+  property but a short list that only paints (colour, background, border
+  colour and radius, outline, shadows, cursor, opacity, visibility,
+  pointer events, user-select, filter, z-index, transitions, text
+  decoration), so an unlisted property fails safe. It compares with the
+  stateless base, so the selected-and-hovered rule, which repeats the
+  selected weight, passes, and the same weight on the plain hover rule
+  fails.
 - **One page:** with a ruler of each form beside it, the live row stays the
   page's one radio group. Its radios are the only bearers of its name, its
   markup is what it draws alone, and a selection fires through it once.
@@ -786,8 +815,11 @@ outset"). See "BackgammonCubeActionsRuler — the inert copy" in Architecture.
   `BackgammonCubeActions.ShortLabels`; a host that needs both forms renders
   one ruler for each.
 - `Dictionary<string, object>? AdditionalAttributes` — splatted onto the
-  root `div` (`bg-cube-actions-ruler`), before its `aria-hidden` and
-  `inert`, which it cannot undo. The way to give the ruler a host's own
+  root `div` (`bg-cube-actions-ruler`), before its own class,
+  `aria-hidden` and `inert`, none of which it can undo. A `class` or a
+  `style`, in any letter case, is not accepted: either could only restyle
+  the box whose width is the measurement, so it throws `ArgumentException`
+  (`ParamName` `AdditionalAttributes`). The way to give the ruler a host's own
   handle, such as a `data-` attribute.
 
 No decision, no value, no callback: the ruler answers nothing and raises
@@ -930,11 +962,15 @@ clipped (for example inside an absolutely positioned, zero-size,
   alone, so whatever width it sets is missing from the copy's measurement.
   The selected state is the `bg-cube-action-selected` class for this reason
   as well. Pinned against the compiled stylesheet.
-- **Hover and focus stay paint-only.** The copy can be neither hovered nor
-  focused, so it measures neither state. A width-bearing declaration under
-  `:hover` or `:focus-visible` (weight, padding, border width) would widen
-  the live row past the budget its host measured. Today they change only
-  colours and the outline; no test pins that.
+- **Hover, focus and active change only paint.** The copy can be neither
+  hovered, focused nor active, so it measures none of those states. A rule
+  keyed to one of them may change paint, or repeat what the element has
+  without the state (as the selected-and-hovered rule repeats the selected
+  weight), but a geometry-bearing declaration that differs from the
+  stateless element (weight, padding, border width, gap) would widen the
+  live row past the budget its host measured.
+  `StatesTheCopyCannotTake_ChangeNoGeometry` enforces this against the
+  compiled stylesheet.
 
 ## BackgammonCubeActionsRuler — pitfalls
 
@@ -955,10 +991,12 @@ clipped (for example inside an absolutely positioned, zero-size,
   unpainted and inert. `display: none` on it or any ancestor leaves it no
   box, and every width it reports is zero. Keep it laid out, out of the
   page's flow, inside a clipping box, so its width cannot widen the page.
-- **Don't splat `class` or `style` onto it.** A splatted `class` replaces
-  `bg-cube-actions-ruler`, the box rule that makes its width the widest
-  copy's, and a `style` can override that sizing. Give it a `data-`
-  attribute to find it by.
+- **It takes no `class` or `style` from a host.** Either could only
+  restyle the box that makes its width the widest copy's, so either is
+  refused with an `ArgumentException`; the ruler's own class is written
+  after the splat besides. Give it a `data-` attribute to find it by.
+  Styling `.bg-cube-actions-ruler` from a host stylesheet would defeat the
+  box the same way; don't.
 - **Never caption the live row from `Spellings`, nor the copy at a
   decision.** The two rows share how a pill is drawn, not how it is
   captioned. The live row labels each answer at its decision; the copy draws

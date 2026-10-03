@@ -271,8 +271,9 @@ public class BackgammonCubeActionsRulerTests : BunitContext
 
     /// <summary>
     /// A host's attributes reach the root, so it can find the ruler by its
-    /// own name for it, but they come before the root's own two, so none of
-    /// them can make the copy visible to assistive technology or interactive.
+    /// own name for it, but they come before the root's own class,
+    /// <c>aria-hidden</c> and <c>inert</c>, so none of them can unstyle the
+    /// box or make the copy visible to assistive technology or interactive.
     /// </summary>
     [Fact]
     public void HostAttributes_ReachTheRoot_ButCannotUndoItsInertness()
@@ -283,8 +284,31 @@ public class BackgammonCubeActionsRulerTests : BunitContext
             .AddUnmatched("inert", false)));
 
         Assert.Equal("cube", root.GetAttribute("data-ruler"));
+        Assert.Equal("bg-cube-actions-ruler", root.GetAttribute("class"));
         Assert.Equal("true", root.GetAttribute("aria-hidden"));
         Assert.True(root.HasAttribute("inert"));
+    }
+
+    /// <summary>
+    /// The root's box is the measurement, so a host may not restyle it. A
+    /// host class, replacing the ruler's or beside it, could stretch, shrink
+    /// or paint the box, and an inline style could do the same; the host
+    /// would read a wrong width with no error. Either attribute, in any
+    /// letter case, is refused at the contract boundary, naming the splat.
+    /// </summary>
+    [Theory]
+    [InlineData("class", "host-ruler")]
+    [InlineData("Class", "host-ruler")]
+    [InlineData("style", "width: 100%")]
+    [InlineData("STYLE", "width: 100%")]
+    public void HostClassOrStyle_IsRefused_NamingTheSplat(string attribute, string value)
+    {
+        var refusal = Assert.Throws<ArgumentException>(() =>
+            Render<BackgammonCubeActionsRuler>(p => p
+                .AddUnmatched("data-ruler", "cube")
+                .AddUnmatched(attribute, value)));
+
+        Assert.Equal(nameof(BackgammonCubeActionsRuler.AdditionalAttributes), refusal.ParamName);
     }
 
     /// <summary>
@@ -371,6 +395,62 @@ public class BackgammonCubeActionsRulerTests : BunitContext
         }
     }
 
+    /// <summary>
+    /// The states the copy cannot take, because it is inert and unpainted,
+    /// change no geometry on the live row. The copy draws every state of the
+    /// row except hover, focus, focus-visible, focus-within and active, so
+    /// its width is the widest the live row can take only while those states
+    /// leave every geometry-bearing property where the stateless row has it.
+    ///
+    /// <para>
+    /// For every element of the live row, root, pills and radios, in every
+    /// state the copy draws, the compiled stylesheet's declared value of each
+    /// geometry-bearing property (<see cref="IsGeometryBearing"/>) is
+    /// cascaded twice: with no dynamic state, and with each dynamic state
+    /// holding, then all of them at once. The two must agree. This compares
+    /// against the stateless base, selected or not, rather than banning a
+    /// property under a state: the selected-and-hovered rule repeats the
+    /// selected weight, which the selected base already has, and stays
+    /// green, while the same weight on the plain hover rule would bolden an
+    /// unselected pill under the pointer and fails.
+    /// </para>
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(LiveStates))]
+    public void StatesTheCopyCannotTake_ChangeNoGeometry(bool gammonsPossible, bool shortLabels, CubeAnswer? value)
+    {
+        var live = RenderLive(gammonsPossible, shortLabels, value).Find(".bg-cube-actions");
+        var rules = CompiledStylesheet.Rules();
+        IReadOnlyList<IReadOnlyCollection<string>> stateSets =
+            [.. DynamicStates.Select(state => (IReadOnlyCollection<string>)[state]), DynamicStates];
+
+        var anyStateReached = false;
+        foreach (var element in live.QuerySelectorAll("*").Prepend(live))
+        {
+            var stateless = CompiledStylesheet.Cascade(element, rules, []);
+            foreach (var states in stateSets)
+            {
+                var stated = CompiledStylesheet.Cascade(element, rules, states);
+                anyStateReached |= !stated.OrderBy(d => d.Key).SequenceEqual(stateless.OrderBy(d => d.Key));
+
+                var changed = stated.Keys.Union(stateless.Keys)
+                    .Where(IsGeometryBearing)
+                    .Where(property => stated.GetValueOrDefault(property) != stateless.GetValueOrDefault(property))
+                    .Select(property =>
+                        $"{property}: {stateless.GetValueOrDefault(property) ?? "(unset)"} → " +
+                        $"{stated.GetValueOrDefault(property) ?? "(unset)"}")
+                    .ToList();
+                Assert.True(changed.Count == 0,
+                    $"<{element.LocalName} class=\"{element.ClassName}\"> under :{string.Join(", :", states)} " +
+                    $"changes geometry the copy cannot measure: {string.Join("; ", changed)}.");
+            }
+        }
+
+        // The states do reach the row (its hover paint, its focus ring), so
+        // the comparison above is made against rules that apply.
+        Assert.True(anyStateReached, "no dynamic state changed any declaration on the live row.");
+    }
+
     // -----------------------------------------------------------------------
     //  On one page with the live row
     // -----------------------------------------------------------------------
@@ -427,6 +507,42 @@ public class BackgammonCubeActionsRulerTests : BunitContext
     // -----------------------------------------------------------------------
     //  Helpers
     // -----------------------------------------------------------------------
+
+    /// <summary>
+    /// The states a pill or the row can be in that the copy, inert and
+    /// unpainted, can never be in: the user-action pseudo-classes.
+    /// </summary>
+    private static readonly string[] DynamicStates = ["hover", "focus", "focus-visible", "focus-within", "active"];
+
+    /// <summary>
+    /// The properties that only paint: they change how a box looks, never its
+    /// size or its place in the row. Every other property is taken as
+    /// geometry-bearing, so a property this list does not know of fails safe
+    /// (a new kind of declaration under a state is questioned, not passed).
+    /// </summary>
+    private static readonly HashSet<string> PaintOnlyProperties =
+    [
+        "color", "background", "border-color", "border-radius", "outline", "box-shadow", "text-shadow",
+        "cursor", "opacity", "visibility", "pointer-events", "user-select", "caret-color", "accent-color",
+        "filter", "z-index",
+    ];
+
+    /// <summary>
+    /// Whether <paramref name="property"/> can change a box's size or place:
+    /// anything but the paint-only properties, their longhands
+    /// (<c>background-*</c>, <c>outline-*</c>, a side's or corner's border
+    /// colour or radius) and the transition and text-decoration families.
+    /// A <c>border</c> shorthand counts, since it sets the width with the
+    /// colour; a colour-only change is written as <c>border-color</c>.
+    /// </summary>
+    private static bool IsGeometryBearing(string property) =>
+        !(PaintOnlyProperties.Contains(property)
+          || property.StartsWith("background-", StringComparison.Ordinal)
+          || property.StartsWith("outline-", StringComparison.Ordinal)
+          || property.StartsWith("transition", StringComparison.Ordinal)
+          || property.StartsWith("text-decoration", StringComparison.Ordinal)
+          || Regex.IsMatch(property, "^border-(top|right|bottom|left)-color$")
+          || Regex.IsMatch(property, "^border-(top|bottom)-(left|right)-radius$"));
 
     /// <summary>Whether <paramref name="name"/> is a scoped-style attribute (<c>b-</c> and ten characters).</summary>
     private static bool IsScopeAttribute(string name) => Regex.IsMatch(name, "^b-[a-z0-9]{10}$");

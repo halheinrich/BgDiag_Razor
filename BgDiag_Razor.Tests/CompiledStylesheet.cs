@@ -1,5 +1,8 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using AngleSharp.Css;
+using AngleSharp.Css.Parser;
+using AngleSharp.Dom;
 
 namespace BgDiag_Razor.Tests;
 
@@ -10,8 +13,9 @@ namespace BgDiag_Razor.Tests;
 /// element carries the attribute, which scoped CSS gives only to the markup
 /// written in that component's own file — so sharing class names proves
 /// nothing, and the compiled selectors are what to match. bUnit has no CSS
-/// engine, but AngleSharp matches selectors, so a test can ask which of these
-/// rules reach a rendered element.
+/// engine, but AngleSharp matches selectors and knows their specificity, so a
+/// test can ask which of these rules reach a rendered element, and which
+/// declared value of each property wins there.
 /// </summary>
 internal static class CompiledStylesheet
 {
@@ -22,21 +26,93 @@ internal static class CompiledStylesheet
     private const string BundleAsset = "BgDiag_Razor.styles.css";
 
     /// <summary>
+    /// One selector of the bundle with its rule's declarations: a rule whose
+    /// selector list has several entries gives one of these per entry.
+    /// </summary>
+    /// <param name="Selector">The selector, its whitespace collapsed.</param>
+    /// <param name="Order">The rule's position in the bundle: of two
+    /// selectors equally specific, the later rule's declarations win.</param>
+    /// <param name="Declarations">The rule's declarations, property names in
+    /// lower case, in the order written.</param>
+    public sealed record Rule(string Selector, int Order, IReadOnlyList<KeyValuePair<string, string>> Declarations);
+
+    /// <summary>
     /// Every selector in the compiled bundle, one per entry of each rule's
     /// selector list, in the bundle's order.
     /// </summary>
-    public static IReadOnlyList<string> Selectors()
+    public static IReadOnlyList<string> Selectors() => [.. Rules().Select(rule => rule.Selector)];
+
+    /// <summary>
+    /// Every rule in the compiled bundle, one per entry of each rule's
+    /// selector list, in the bundle's order.
+    /// </summary>
+    public static IReadOnlyList<Rule> Rules()
     {
         var css = ComponentSources.StripComments(File.ReadAllText(BundlePath()));
 
         // A flat sheet of rules. An at-rule (a media query, say) would nest
-        // rules this reading does not descend into, so it fails loudly rather
-        // than leaving rules unread.
+        // rules this reading does not descend into, and !important would
+        // reorder the cascade it computes, so either fails loudly rather than
+        // leaving a rule misread.
         Assert.DoesNotContain("@", css);
-        var rules = Regex.Matches(css, @"(?<selectors>[^{}]+)\{[^{}]*\}");
-        Assert.Equal(css.Count(c => c == '{'), rules.Count);
+        Assert.DoesNotContain("!important", css);
+        var blocks = Regex.Matches(css, @"(?<selectors>[^{}]+)\{(?<body>[^{}]*)\}");
+        Assert.Equal(css.Count(c => c == '{'), blocks.Count);
 
-        return [.. rules.SelectMany(rule => SelectorList(rule.Groups["selectors"].Value))];
+        return [.. blocks.SelectMany((block, order) =>
+        {
+            var declarations = DeclarationsOf(block.Groups["body"].Value);
+            return SelectorList(block.Groups["selectors"].Value)
+                .Select(selector => new Rule(selector, order, declarations));
+        })];
+    }
+
+    /// <summary>
+    /// The declared value of every property the bundle sets on
+    /// <paramref name="element"/>: of the rules whose selector matches it, the
+    /// most specific wins, and of equally specific ones the later. The states
+    /// named in <paramref name="activeStates"/> (e.g. <c>hover</c>) are
+    /// treated as holding wherever a selector asks for them, so the result is
+    /// the element's declared style while it is in those states. Inline
+    /// styles and inheritance are out of its reach; the caller asks each
+    /// element of a tree it cares about.
+    /// </summary>
+    public static IReadOnlyDictionary<string, string> Cascade(
+        IElement element, IReadOnlyList<Rule> rules, IReadOnlyCollection<string> activeStates)
+    {
+        var parser = new CssSelectorParser();
+        var declared = new Dictionary<string, string>();
+        var reaching = rules
+            .Where(rule => element.Matches(WithStatesHolding(rule.Selector, activeStates)))
+            .Select(rule => (rule, specificity: SpecificityOf(parser, rule.Selector)))
+            .ToList();
+        reaching.Sort((a, b) =>
+            a.specificity < b.specificity ? -1
+            : a.specificity > b.specificity ? 1
+            : a.rule.Order.CompareTo(b.rule.Order));
+
+        foreach (var (rule, _) in reaching)
+        foreach (var (property, value) in rule.Declarations)
+            declared[property] = value;
+        return declared;
+    }
+
+    /// <summary>
+    /// <paramref name="selector"/> with each pseudo-class named in
+    /// <paramref name="states"/> taken out, so it matches as it would while
+    /// those states hold. <c>:focus</c> is told apart from
+    /// <c>:focus-visible</c> and <c>:focus-within</c>.
+    /// </summary>
+    private static string WithStatesHolding(string selector, IReadOnlyCollection<string> states) =>
+        states.Aggregate(selector, (current, state) =>
+            Regex.Replace(current, $@":{Regex.Escape(state)}(?![-\w])", ""));
+
+    /// <summary>The specificity of <paramref name="selector"/> as written, its states included.</summary>
+    private static Priority SpecificityOf(CssSelectorParser parser, string selector)
+    {
+        var parsed = parser.ParseSelector(selector);
+        Assert.True(parsed is not null, $"AngleSharp cannot parse the compiled selector `{selector}`.");
+        return parsed.Specificity;
     }
 
     /// <summary>
@@ -55,6 +131,20 @@ internal static class CompiledStylesheet
             [asset.GetProperty("ContentRootIndex").GetInt32()].GetString()!;
         return Path.Combine(contentRoot, asset.GetProperty("SubPath").GetString()!);
     }
+
+    /// <summary>
+    /// The declarations of one rule's <paramref name="body"/>, each a
+    /// property in lower case and its value with whitespace collapsed.
+    /// </summary>
+    private static IReadOnlyList<KeyValuePair<string, string>> DeclarationsOf(string body) =>
+        [.. body.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(declaration =>
+            {
+                var colon = declaration.IndexOf(':');
+                Assert.True(colon > 0, $"`{declaration}` is not a declaration.");
+                return new KeyValuePair<string, string>(
+                    declaration[..colon].Trim().ToLowerInvariant(), Collapsed(declaration[(colon + 1)..]));
+            })];
 
     /// <summary>
     /// The selectors of one rule's <paramref name="list"/>, split at its
@@ -84,6 +174,6 @@ internal static class CompiledStylesheet
         yield return Collapsed(list[start..]);
     }
 
-    private static string Collapsed(string selector) =>
-        Regex.Replace(selector.Trim(), @"\s+", " ");
+    private static string Collapsed(string text) =>
+        Regex.Replace(text.Trim(), @"\s+", " ");
 }

@@ -11,9 +11,14 @@
    has the row's classes but not its wiring — no role or aria-label on the
    root, no radio in a pill — so every rule that sets a width keys on the
    classes alone, or the copy would measure a different row. The selected
-   state is the bg-cube-action-selected class, not the radio's checked state,
-   and :hover and :focus-visible change only paint, since the copy can take
-   neither state.
+   state is the bg-cube-action-selected class, not the radio's checked state.
+   And since the copy can take no user-action state, a rule keyed to :hover,
+   :focus, :focus-visible, :focus-within or :active changes only paint, or
+   repeats what the element has without the state (the selected-and-hovered
+   rule repeats the selected weight); it sets no geometry-bearing property to
+   anything else. BackgammonCubeActionsRulerTests'
+   StatesTheCopyCannotTake_ChangeNoGeometry enforces it against the compiled
+   stylesheet.
 
    The four answers are the umbrella's SPEC-scoring.md §3 (amended on
    halheinrich/backgammon#326). One flex row at one gap: there is
