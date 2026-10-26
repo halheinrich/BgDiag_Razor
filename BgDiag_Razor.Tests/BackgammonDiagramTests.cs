@@ -4,6 +4,7 @@ using BgDiag_Razor.Components;
 using BackgammonDiagram_Lib;
 using BackgammonDiagram_Lib.Rendering;
 using BgDataTypes_Lib;
+using BgDataTypes_Lib.TestSupport;
 
 namespace BgDiag_Razor.Tests;
 
@@ -246,6 +247,237 @@ public class BackgammonDiagramTests : BunitContext
         Assert.Equal(
             Enumerable.Range(1, 24).Select(n => n.ToString()),
             allRects.Take(24).Select(r => r.GetAttribute("data-point")));
+    }
+
+    // -----------------------------------------------------------------------
+    //  Candidate rows — showing a play (halheinrich/backgammon#440, #194).
+    //
+    //  One rect per row the play panel draws, keyed by the candidate's stored
+    //  index (BoardHitRegions.Candidates), carrying data-candidate for the
+    //  reason data-point exists, and reporting that index to
+    //  OnCandidateClicked. Two decisions make a wrong key visible: one whose
+    //  drawn order differs from its stored order (a row-position bug fails
+    //  it), and one whose drawn keys have gaps (a bug reporting the rect's
+    //  place among the candidate rects fails it).
+    // -----------------------------------------------------------------------
+
+    /// <summary>
+    /// Three candidates stored at equities 0.40, 0.50, 0.45: the equity
+    /// ranking draws them as stored indices 1, 2, 0.
+    /// </summary>
+    private static DiagramRequest StoredOutOfOrder() =>
+        DiagramRequest.ForDecision(
+            TestRecords.CheckerPlay(decision: TestRecords.CheckerPlayData(
+                plays:
+                [
+                    TestRecords.Candidate(play: [new(8, 5), new(6, 5)], equity: 0.40),
+                    TestRecords.Candidate(play: [new(24, 21), new(6, 5)], equity: 0.50),
+                    TestRecords.Candidate(play: [new(13, 10), new(6, 5)], equity: 0.45),
+                ],
+                userPlayIndex: null)),
+            PlayRanking.Equity) with { Mode = DiagramMode.Solution };
+
+    /// <summary>
+    /// Six 3-ply candidates in falling equity, but the third a rollout, under a
+    /// 3-ply ceiling and with the sixth shown: the panel draws the user's play
+    /// (stored 0), the rollout (2) and the shown play (5) — drawn keys 0, 2, 5.
+    /// </summary>
+    private static DiagramRequest GappedKeys() =>
+        DiagramRequest.ForDecision(
+            TestRecords.CheckerPlay(decision: TestRecords.CheckerPlayData(
+                plays:
+                [
+                    TestRecords.Candidate(play: [new(8, 5), new(6, 5)], equity: 0.16),
+                    TestRecords.Candidate(play: [new(24, 21), new(6, 5)], equity: 0.10),
+                    TestRecords.Candidate(play: [new(13, 10), new(6, 5)], equity: 0.05,
+                        analysisMode: AnalysisMode.Rollout, rolloutTrials: 1296),
+                    TestRecords.Candidate(play: [new(24, 23), new(13, 10)], equity: 0.00),
+                    TestRecords.Candidate(play: [new(8, 7), new(8, 5)], equity: -0.05),
+                    TestRecords.Candidate(play: [new(24, 23), new(24, 21)], equity: -0.10),
+                ],
+                userPlayIndex: 0)),
+            PlayRanking.Equity) with
+        {
+            Mode = DiagramMode.Solution,
+            MaximumHiddenCandidateAnalysisLevel = AnalysisLevel.Ply3,
+            ShownPlayIndex = 5,
+        };
+
+    public static TheoryData<string> CandidateCases => new() { "stored out of order", "gapped keys" };
+
+    private static DiagramRequest CandidateCase(string name) => name switch
+    {
+        "stored out of order" => StoredOutOfOrder(),
+        "gapped keys" => GappedKeys(),
+        _ => throw new ArgumentOutOfRangeException(nameof(name)),
+    };
+
+    [Fact]
+    public void CandidateCases_ExerciseWhatTheyClaim()
+    {
+        // The cases are only worth their names if the producer draws them so:
+        // the first's rows, read top to bottom, are not in stored order, and
+        // the second's drawn keys have gaps.
+        var options = new DiagramOptions();
+
+        var outOfOrder = DiagramRenderer.GetHitRegions(StoredOutOfOrder(), options).Candidates;
+        Assert.Equal([1, 2, 0], outOfOrder.OrderBy(kvp => kvp.Value.Y).Select(kvp => kvp.Key));
+
+        var gapped = DiagramRenderer.GetHitRegions(GappedKeys(), options).Candidates;
+        Assert.Equal([0, 2, 5], gapped.Keys.Order());
+    }
+
+    [Theory]
+    [MemberData(nameof(CandidateCases))]
+    public void CandidateRects_AreExactlyTheDrawnRows_InKeyOrder_WithTheirRegionsGeometry(string name)
+    {
+        var request = CandidateCase(name);
+        var options = new DiagramOptions();
+        var candidates = DiagramRenderer.GetHitRegions(request, options).Candidates;
+
+        var cut = Render<BackgammonDiagram>(parameters => parameters
+            .Add(p => p.Request, request)
+            .Add(p => p.Options, options));
+
+        var rects = cut.FindAll("rect[data-candidate]");
+        Assert.Equal(
+            candidates.Keys.Order().Select(i => i.ToString(CultureInfo.InvariantCulture)),
+            rects.Select(r => r.GetAttribute("data-candidate")));
+
+        foreach (var rect in rects)
+        {
+            var region = candidates[int.Parse(rect.GetAttribute("data-candidate")!, CultureInfo.InvariantCulture)];
+            Assert.Equal(SvgFormat.Number(region.X), rect.GetAttribute("x"));
+            Assert.Equal(SvgFormat.Number(region.Y), rect.GetAttribute("y"));
+            Assert.Equal(SvgFormat.Number(region.Width), rect.GetAttribute("width"));
+            Assert.Equal(SvgFormat.Number(region.Height), rect.GetAttribute("height"));
+            Assert.Equal("transparent", rect.GetAttribute("fill"));
+            Assert.Equal("all", rect.GetAttribute("pointer-events"));
+        }
+    }
+
+    public static TheoryData<string> NoPlayPanelCases => new() { "board", "problem", "cube solution" };
+
+    [Theory]
+    [MemberData(nameof(NoPlayPanelCases))]
+    public void NoCandidateRects_WhereNoPlayPanelIsDrawn(string name)
+    {
+        var request = name switch
+        {
+            "board" => DefaultRequest,
+            "problem" => StoredOutOfOrder() with { Mode = DiagramMode.Problem },
+            "cube solution" => DiagramRequest.ForDecision(TestRecords.Cube(), PlayRanking.Equity) with { Mode = DiagramMode.Solution },
+            _ => throw new ArgumentOutOfRangeException(nameof(name)),
+        };
+
+        var cut = Render<BackgammonDiagram>(parameters => parameters
+            .Add(p => p.Request, request)
+            .Add(p => p.Options, new DiagramOptions()));
+
+        // Guard against a vacuous pass: the overlay itself is drawn.
+        Assert.Equal(24, cut.FindAll("rect[data-point]").Count);
+        Assert.Empty(cut.FindAll("rect[data-candidate]"));
+    }
+
+    [Theory]
+    [MemberData(nameof(CandidateCases))]
+    public async Task ClickingEachCandidateRect_InvokesOnCandidateClicked_WithItsStoredIndex(string name)
+    {
+        var request = CandidateCase(name);
+        int clicked = -1;
+        var cut = Render<BackgammonDiagram>(parameters => parameters
+            .Add(p => p.Request, request)
+            .Add(p => p.Options, new DiagramOptions())
+            .Add(p => p.OnCandidateClicked, (int i) => { clicked = i; }));
+
+        var keys = DiagramRenderer.GetHitRegions(request, new DiagramOptions()).Candidates.Keys;
+        Assert.NotEmpty(keys);
+
+        foreach (int key in keys)
+        {
+            clicked = -1;
+            await cut.Find($"rect[data-candidate='{key}']")
+                .ClickAsync(new Microsoft.AspNetCore.Components.Web.MouseEventArgs());
+            Assert.Equal(key, clicked);
+        }
+    }
+
+    /// <summary>
+    /// The candidate rects sit after the tray and before the dice, so every
+    /// positional reading in use — the first rect is point 1, the 25th the
+    /// bar, the last the dice — holds on a diagram that draws them.
+    /// </summary>
+    [Fact]
+    public async Task CandidateRects_LeaveThePositionalReadingsInPlace()
+    {
+        var request = StoredOutOfOrder();
+        var regions = DiagramRenderer.GetHitRegions(request, new DiagramOptions());
+        Assert.NotEmpty(regions.Candidates);
+        Assert.NotNull(regions.Dice);
+
+        int barValue = -1;
+        bool diceFired = false;
+        int candidateClicked = -1;
+        var cut = Render<BackgammonDiagram>(parameters => parameters
+            .Add(p => p.Request, request)
+            .Add(p => p.Options, new DiagramOptions())
+            .Add(p => p.OnBarClicked, (int v) => { barValue = v; })
+            .Add(p => p.OnDiceClicked, () => { diceFired = true; })
+            .Add(p => p.OnCandidateClicked, (int i) => { candidateClicked = i; }));
+
+        var rects = cut.FindAll("rect[fill='transparent'][pointer-events='all']");
+
+        Assert.Equal("1", rects[0].GetAttribute("data-point"));
+
+        await rects[24].ClickAsync(new Microsoft.AspNetCore.Components.Web.MouseEventArgs());
+        Assert.Equal(25, barValue);
+
+        await rects[^1].ClickAsync(new Microsoft.AspNetCore.Components.Web.MouseEventArgs());
+        Assert.True(diceFired);
+        Assert.Equal(-1, candidateClicked);
+    }
+
+    /// <summary>
+    /// A click that shows a play is the component's to report and ends there:
+    /// a Blazor <c>@onclick</c> on an ancestor — the page's "click elsewhere
+    /// restores" — never sees a candidate click, and still sees a click on
+    /// the board. bUnit dispatches a click up the ancestors' Blazor handlers
+    /// and honours <c>@onclick:stopPropagation</c>, so this pins the behaviour
+    /// itself, within Blazor's scope; the DOM's own propagation is a browser's.
+    /// </summary>
+    [Fact]
+    public async Task CandidateClicks_StopAtTheRow_PointClicksReachABlazorAncestor()
+    {
+        int ancestorClicks = 0;
+        int candidateClicked = -1;
+        int pointClicked = -1;
+        var request = StoredOutOfOrder();
+
+        var cut = Render(builder =>
+        {
+            builder.OpenElement(0, "div");
+            builder.AddAttribute(1, "onclick",
+                Microsoft.AspNetCore.Components.EventCallback.Factory.Create<Microsoft.AspNetCore.Components.Web.MouseEventArgs>(
+                    this, () => ancestorClicks++));
+            builder.OpenComponent<BackgammonDiagram>(2);
+            builder.AddComponentParameter(3, nameof(BackgammonDiagram.Request), request);
+            builder.AddComponentParameter(4, nameof(BackgammonDiagram.OnCandidateClicked),
+                Microsoft.AspNetCore.Components.EventCallback.Factory.Create<int>(this, i => candidateClicked = i));
+            builder.AddComponentParameter(5, nameof(BackgammonDiagram.OnPointClicked),
+                Microsoft.AspNetCore.Components.EventCallback.Factory.Create<int>(this, pt => pointClicked = pt));
+            builder.CloseComponent();
+            builder.CloseElement();
+        });
+
+        await cut.Find("rect[data-point='7']")
+            .ClickAsync(new Microsoft.AspNetCore.Components.Web.MouseEventArgs());
+        Assert.Equal(7, pointClicked);
+        Assert.Equal(1, ancestorClicks);
+
+        await cut.Find("rect[data-candidate='2']")
+            .ClickAsync(new Microsoft.AspNetCore.Components.Web.MouseEventArgs());
+        Assert.Equal(2, candidateClicked);
+        Assert.Equal(1, ancestorClicks);
     }
 
     // -----------------------------------------------------------------------

@@ -27,9 +27,12 @@ namespace BgDiag_Razor.Components;
 /// same <c>BoardHitRegions.ViewBox</c> as the diagram, carries one transparent
 /// <c>&lt;rect&gt;</c> per hit region: each board point (invoking
 /// <see cref="OnPointClicked"/> with 1–24), the bar (<see cref="OnBarClicked"/>
-/// with 25), the on-roll tray (<see cref="OnTrayClicked"/>), and the dice region
-/// when present (<see cref="OnDiceClicked"/>). The view forwards clicks; it does
-/// not interpret them.
+/// with 25), the on-roll tray (<see cref="OnTrayClicked"/>), each candidate row
+/// the play panel draws (<see cref="OnCandidateClicked"/> with the candidate's
+/// stored index), and the dice region when present (<see cref="OnDiceClicked"/>),
+/// in that order — so the first rect is point 1, the 25th the bar and the last
+/// the dice wherever dice are drawn. The view forwards clicks; it does not
+/// interpret them.
 /// </para>
 ///
 /// <para>
@@ -45,6 +48,9 @@ namespace BgDiag_Razor.Components;
 /// positional reading still holds; it is simply no longer the only one. It is
 /// deliberately a plain <c>data-</c> attribute rather than an <c>id</c>: it
 /// repeats across two diagrams on one page without minting duplicate ids.
+/// Each candidate row's rect carries <c>data-candidate="i"</c> for the same
+/// reason, i the candidate's stored index (the index the callback reports), in
+/// ascending order of i; no other rect carries it.
 /// </para>
 ///
 /// <para>
@@ -102,6 +108,22 @@ public partial class BackgammonDiagram : ComponentBase
     /// it does not interpret it (submit vs. swap is the consumer's choice).</summary>
     [Parameter]
     public EventCallback OnDiceClicked { get; set; }
+
+    /// <summary>
+    /// Fired when a candidate row of the play panel is clicked, with the
+    /// candidate's stored index into the decision's plays — its index under any
+    /// ranking, analysis-level ceiling or rescue, never its row position. Rows
+    /// exist only on a Solution-mode checker play.
+    /// <para>
+    /// The click's propagation stops at the row within Blazor's event handling,
+    /// so a Blazor <c>@onclick</c> on an ancestor never sees it; every other
+    /// region's click propagates. The stop is limited to the Blazor scope and
+    /// does not extend to the HTML DOM: a JavaScript listener still sees the
+    /// click, so a host that needs the stop must use a Blazor handler.
+    /// </para>
+    /// </summary>
+    [Parameter]
+    public EventCallback<int> OnCandidateClicked { get; set; }
 
     // -----------------------------------------------------------------------
     //  Catch-all for arbitrary HTML attributes (e.g. style, id, class)
