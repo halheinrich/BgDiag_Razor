@@ -250,7 +250,8 @@ public class BackgammonDiagramTests : BunitContext
     }
 
     // -----------------------------------------------------------------------
-    //  Candidate rows — showing a play (halheinrich/backgammon#440, #194).
+    //  Candidate rows — showing a play (halheinrich/backgammon#440,
+    //  halheinrich/backgammon#194).
     //
     //  One rect per row the play panel draws, keyed by the candidate's stored
     //  index (BoardHitRegions.Candidates), carrying data-candidate for the

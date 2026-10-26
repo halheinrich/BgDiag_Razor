@@ -205,6 +205,27 @@ the matching `EventCallback`:
 - `Bar` → invokes `OnBarClicked(25)`.
 - `OnRollTray` (the on-roll player's bearing-off tray, nullable) → invokes
   `OnTrayClicked`.
+- `Candidates` dictionary → one `<rect>` per candidate row the play panel
+  draws, in ascending key order, invokes `OnCandidateClicked` with the key:
+  the candidate's stored index into the decision's plays, as given, under any
+  ranking, ceiling or rescue — never its row position. Empty, so no rects,
+  unless a Solution-mode checker play's panel is drawn.
+- `Dice` (nullable) → invokes `OnDiceClicked`.
+
+Rects are emitted in that order — points, bar, tray, candidate rows, dice —
+so the first rect is point 1, the 25th the bar, and the last the dice
+wherever dice are drawn; consumers' positional readings rely on this
+(BgQuiz's e2e, this repo's click tests).
+
+**Candidate clicks stop propagating.** The candidate rects carry
+`@onclick:stopPropagation="true"`: a click that shows a play is the
+component's to report and ends there, so a host's Blazor `@onclick` on an
+ancestor — the quiz page's "click elsewhere restores the played position"
+(`SPEC-quiz-view.md` §1, showing a play) — never sees it as a click outside
+the list. Every other region propagates, since a click on the board is a
+click outside the list. The stop is limited to the Blazor scope and does
+not extend to the HTML DOM: a JavaScript listener still sees the click, so
+a host that needs the stop must use a Blazor handler.
 
 The overlay is the second child of the outer wrapper so it sits above the
 pointer-events-disabled diagram in stacking order.
@@ -221,6 +242,13 @@ unchanged, so the positional reading still holds and is test-pinned alongside
 the attribute; it is simply no longer the only one. A plain `data-` attribute
 rather than an `id`, deliberately: it repeats across two diagrams on one page
 without minting duplicate ids.
+
+**Candidate rects are addressable** for the same reason: each carries
+`data-candidate="i"` (i the candidate's stored index, the key the callback
+reports), and no other rect carries it — so `rect[data-candidate]` is exactly
+the drawn rows and `rect[data-candidate="5"]` is stored candidate 5, whatever
+row it is drawn on. Styling the rows (a pointer cursor, say) is the host's
+CSS against that selector.
 
 ### BackgammonDiagram — catch-all attributes
 
@@ -574,7 +602,13 @@ checker is an ordinary advance from its home point, not a tray click.
 bUnit + xUnit, targets .NET 10. `BackgammonDiagramTests` cover the view-only
 primitive (markup, hit-region overlay, callback wiring) and the point rects'
 `data-point` identity (present on all 24 and on nothing else, clickable by
-attribute selector, and in agreement with the render order it supersedes).
+attribute selector, and in agreement with the render order it supersedes),
+and the candidate rows: `rect[data-candidate]` exactly the
+`GetHitRegions` keys with their geometry, absent without a play panel, each
+click reporting its stored index on a decision drawn out of stored order and
+on one with gapped keys, the positional readings unmoved, and the stopped
+propagation against a Blazor ancestor (bUnit dispatches up the ancestors'
+Blazor handlers and honours `stopPropagation`).
 `BackgammonPlayEntryTests`
 cover the play-entry contract, every request built from a checker-play
 record by the producer's `TestRecords`: legal-completion firing, with the
@@ -718,6 +752,11 @@ All four components live in namespace `BgDiag_Razor.Components`.
 - `EventCallback OnDiceClicked` — fired when the dice region is clicked
   (rendered only when a dice hit-region exists, i.e. not for cube decisions).
   The view forwards the click; it does not interpret it.
+- `EventCallback<int> OnCandidateClicked` — fired with the clicked candidate
+  row's stored index into the decision's plays (the `BoardHitRegions.Candidates`
+  key), under any ranking, ceiling or rescue. Rows exist only on a
+  Solution-mode checker play. The click stops propagating within Blazor's
+  scope only (see the overlay section).
 
 **Sizing contract:** self-sizing via `aspect-ratio` plus a contain-fit
 default — give the containing block one definite dimension for width-driven
