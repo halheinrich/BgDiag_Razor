@@ -539,7 +539,8 @@ public class BackgammonDiagramTests : BunitContext
         // are inert in an unbounded flow — a percentage max-height against an
         // indefinite containing-block height computes to none, and auto margins
         // are zero while the box fills its row — so width-driven consumers see
-        // no change (validated empirically; bUnit can pin only the emitted style).
+        // no change (a live-browser check, 83329dd, the harness not kept; bUnit
+        // can pin only the emitted style).
         var cut = Render<BackgammonDiagram>(parameters => parameters
             .Add(p => p.Request, DefaultRequest)
             .Add(p => p.Options, new DiagramOptions()));
@@ -588,8 +589,8 @@ public class BackgammonDiagramTests : BunitContext
         // bare `@r.Width` for e.g. 30.8 emits "30,8" — an invalid SVG attribute
         // a browser parses as 0, so the bar (and the viewBox) silently break.
         // The overlay must route every geometry number through the lib's
-        // culture-invariant formatter instead. Confirmed as a production bug by
-        // a Norway beta tester on an nb-NO browser.
+        // culture-invariant formatter instead. A production bug, reported by a
+        // Norway beta tester on an nb-NO browser (a635202, 2026-07-15).
         RunUnderCulture("nb-NO", () =>
         {
             // Sanity: the hostile culture really does use a comma decimal, so a

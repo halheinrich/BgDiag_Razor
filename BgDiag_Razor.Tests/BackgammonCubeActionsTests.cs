@@ -667,9 +667,9 @@ public class BackgammonCubeActionsTests : BunitContext
     //
     //  These pin the ruled resolution of halheinrich/backgammon#99 (umbrella
     //  SPEC-quiz-view.md §2's invariance floor): the row's horizontal metrics
-    //  are a measured contract, not free styling, and the native radio dot is
-    //  hidden rather than dropped. bUnit has no CSS engine and builds no
-    //  accessibility tree, so the fact is pinned from both ends — the markup
+    //  are constants set against measurement, not free styling, and the native
+    //  radio dot is hidden rather than dropped. bUnit has no CSS engine and
+    //  builds no accessibility tree, so the fact is pinned from both ends — the markup
     //  half here, and the styling half by reading the scoped stylesheet as
     //  text (the technique BgQuiz's MainLayout band tests established).
     // -----------------------------------------------------------------------
@@ -716,9 +716,10 @@ public class BackgammonCubeActionsTests : BunitContext
     ///
     /// <para>
     /// The blunt ways out are defects, not equivalent implementations:
-    /// <c>display: none</c>, <c>visibility: hidden</c> and a zeroed size each
-    /// take the radio out of the tab order and out of assistive technology's
-    /// reach. So, less obviously, is the sr-only <c>clip-path</c> recipe — it
+    /// <c>display: none</c> and <c>visibility: hidden</c> each take the radio
+    /// out of the tab order and out of assistive technology's reach, and a
+    /// zeroed size leaves it no hit area. So, less obviously, is the sr-only
+    /// <c>clip-path</c> recipe a defect — it
     /// clips hit-testing along with painting, so the input stops being the
     /// element at its own centre (<c>elementFromPoint</c> there returns the
     /// label) and anything driving the real control by pointer cannot reach it.
@@ -770,36 +771,26 @@ public class BackgammonCubeActionsTests : BunitContext
     }
 
     /// <summary>
-    /// The compaction constants, pinned with their arithmetic. Measured against
-    /// the live consumer, the original four compound pills totalled 561.6px —
-    /// 56% of the 1001.4px action row — and out-widened the checker row
-    /// through the 641–1366px band. The pill gap (0.75rem → 0.25rem), the
-    /// pill's inline padding (0.9rem → 0.45rem) and the hidden dot (13px
-    /// control + its 0.5rem caption gap) were the −165.6px that closed it,
-    /// and all three stand here. The four full labels with the fourth reading
-    /// Too good measure, at these constants,
-    /// 89.3 + 113.9 + 116.0 + 82.2 = 401.4px of pills plus three 4px gaps:
-    /// 413.5px unselected, 418.8px with the widest pill (Double / Pass)
-    /// selected and 419.3px at most over any selection (weight 600 widens the
-    /// selected caption) — under the consumer's 16px Helvetica/Arial stack.
-    /// The longer fourth label, No double / Pass, and the short form are not
-    /// measured here: whether the row clears the consumer's row, and where
-    /// the host switches to the short form, are the consumer's measurements to
-    /// take (SPEC-quiz-view §4), and these numbers are its input. With one
-    /// group there is one gap, the compacted one: the wider inter-group gap
-    /// went with the second group. bUnit cannot evaluate any of that; what
-    /// it can do is stop the constants being widened back without a fresh
-    /// measurement.
+    /// The compaction constants, pinned. At the original metrics the action row
+    /// out-widened the checker row through the 641–1366px band; the pill gap
+    /// (0.75rem → 0.25rem), the pill's inline padding (0.9rem → 0.45rem) and
+    /// the hidden dot closed it, and all three stand here. Each measured width
+    /// and its record are in this repo's INSTRUCTIONS.md ("The horizontal
+    /// metrics"): they are browser measurements from a152d00, fc0c0a6 and
+    /// 7075e32, and no test pins a width. With one group there is one gap, the
+    /// compacted one: the wider inter-group gap went with the second group.
+    /// bUnit cannot evaluate any of that; what it can do is stop the constants
+    /// being widened back without a fresh measurement.
     ///
     /// <para>
-    /// The <i>vertical</i> metrics are pinned in the same breath because they
-    /// are the tap-target floor: 0.5rem of block padding plus a 1.2 line-height
-    /// on a 16px caption plus 1px borders is the pill's measured 37px height,
-    /// which real-tablet touch data stands behind. Compaction was horizontal
-    /// only — shaving block padding would trade a layout win for a touch
-    /// regression. The absence of a media query is pinned too: the compact form
-    /// is the form at every width, because a producer component has no view of
-    /// the consumer's layout to gate one on.
+    /// The <i>vertical</i> metrics are pinned in the same breath: 0.5rem of
+    /// block padding plus a 1.2 line-height on a 16px caption plus 1px borders
+    /// is the pill's 37.2px height (fc0c0a6). Compaction was horizontal only,
+    /// and the height was kept as the pill's tap target; a152d00 cites touch
+    /// data for that, which is recorded nowhere, so the reason is an assumption
+    /// and the height the fact. The absence of a media query is pinned too:
+    /// the compact form is the form at every width, because a producer
+    /// component has no view of the consumer's layout to gate one on.
     /// </para>
     /// </summary>
     [Fact]

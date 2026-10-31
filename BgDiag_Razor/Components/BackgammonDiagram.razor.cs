@@ -64,8 +64,8 @@ namespace BgDiag_Razor.Components;
 /// <b>Self-sizing.</b> The <c>.bg-diagram</c> root carries an
 /// <c>aspect-ratio</c> derived from the rendered viewBox plus a contain-fit
 /// default, so a consumer supplies one definite dimension for width-driven flow
-/// or a definite height to letterbox — see the sizing pitfalls in the submodule
-/// <c>INSTRUCTIONS.md</c>.
+/// or a definite height to letterbox — see "Sizing" and the pitfalls in this
+/// repo's <c>INSTRUCTIONS.md</c>.
 /// </para>
 /// </summary>
 public partial class BackgammonDiagram : ComponentBase
@@ -130,11 +130,13 @@ public partial class BackgammonDiagram : ComponentBase
     // -----------------------------------------------------------------------
 
     /// <summary>
-    /// Catch-all for arbitrary HTML attributes (e.g. <c>style</c>, <c>id</c>,
-    /// <c>class</c>) splatted onto the outer <c>.bg-diagram</c> wrapper
-    /// <c>div</c>. Note that passing <c>style</c> here overrides the component's
-    /// inline root style and drops the self-sizing ratio and contain-fit default
-    /// (see the self-sizing pitfall) — prefer sizing via the container.
+    /// Catch-all for arbitrary HTML attributes (e.g. <c>id</c>, a <c>data-</c>
+    /// attribute) splatted onto the outer <c>.bg-diagram</c> wrapper <c>div</c>,
+    /// after its class and style, so a host attribute of the same name wins. A
+    /// <c>class</c> therefore replaces <c>bg-diagram</c>, and a <c>style</c>
+    /// replaces the component's inline root style, dropping the self-sizing ratio
+    /// and the contain-fit default (see the pitfall "Size through the container"
+    /// in this repo's <c>INSTRUCTIONS.md</c>) — prefer sizing via the container.
     /// </summary>
     [Parameter(CaptureUnmatchedValues = true)]
     public Dictionary<string, object>? AdditionalAttributes { get; set; }

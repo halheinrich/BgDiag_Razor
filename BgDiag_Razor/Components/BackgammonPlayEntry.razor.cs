@@ -27,8 +27,8 @@ namespace BgDiag_Razor.Components;
 /// bar) commits one move from that source via
 /// <see cref="MoveEntryState.TryAdvanceFrom"/>, the model choosing which die to
 /// consume by <see cref="DicePreference"/> (the rendered dice order, leftmost
-/// first — see finding 2's display swap). A full play is entered by successive single
-/// clicks. Click index conventions:
+/// first, which the dice click's display swap can reverse). A full play is entered
+/// by successive single clicks. Click index conventions:
 /// <list type="bullet">
 ///   <item>1..24 — regular board points (click a point holding an own checker)</item>
 ///   <item>25 — on-roll player's bar (click to enter, if a bar checker is present)</item>
@@ -43,7 +43,7 @@ namespace BgDiag_Razor.Components;
 /// via <see cref="MoveEntryState.TryMakePoint"/>, hitting a blot there
 /// automatically. A point click therefore tries source-advance first and only falls
 /// through to make when advance is illegal — the producer's own-occupied guard
-/// makes that dispatch board-blind, so an own checker always advances (E1) and a
+/// makes that dispatch board-blind, so an own checker always advances and a
 /// point with no own checker falls to make without the component inspecting the
 /// board. A non-doubles make consumes both dice and completes the play; a doubles
 /// make may leave dice for further clicks (the play stays in-progress). When the
@@ -83,10 +83,12 @@ namespace BgDiag_Razor.Components;
 /// </para>
 ///
 /// <para>
-/// <b>Pass positions</b> (no legal play exists) render the immovable position; clicks
-/// are no-ops. The component does <i>not</i> auto-fire <see cref="OnPlayCompleted"/>
-/// in this case — pass-position handling (skip-to-next-problem) is the consumer's
-/// responsibility.
+/// <b>Pass positions</b> (no legal play exists) render the immovable position. The
+/// entry state is complete at construction, so point, bar and tray clicks are
+/// no-ops and a dice click fires <see cref="OnSubmitRequested"/>. The component does
+/// <i>not</i> auto-fire <see cref="OnPlayCompleted"/> in this case, so that submit
+/// arrives with no play reported — pass-position handling (skip-to-next-problem) is
+/// the consumer's responsibility.
 /// </para>
 ///
 /// <para>
@@ -94,7 +96,7 @@ namespace BgDiag_Razor.Components;
 /// an internal <c>.bg-board-slot</c> div. Give <c>.bg-play-entry</c> a definite
 /// height (a real <c>height</c>, or shrinkable-flex-item sizing — never
 /// <c>max-height</c> alone) and the board letterboxes to it, ratio preserved;
-/// unbounded consumers get today's width-driven flow unchanged. The mechanism
+/// unbounded consumers get width-driven flow. The mechanism
 /// lives in the scoped CSS (flex column, shrinkable slot) plus
 /// <c>.bg-diagram</c>'s own contain-fit default.
 /// </para>
@@ -149,8 +151,11 @@ public partial class BackgammonPlayEntry : ComponentBase
     public EventCallback OnSubmitRequested { get; set; }
 
     /// <summary>
-    /// Catch-all for arbitrary HTML attributes (e.g. <c>style</c>, <c>id</c>,
-    /// <c>class</c>) splatted onto the outer wrapper <c>div</c>.
+    /// Catch-all for arbitrary HTML attributes (e.g. <c>style</c>, <c>id</c>, a
+    /// <c>data-</c> attribute) splatted onto the outer wrapper <c>div</c>, after
+    /// its class, so a host attribute of the same name wins. A host <c>class</c>
+    /// therefore replaces <c>bg-play-entry</c>, and the scoped flex column the
+    /// bounded-height contract rests on goes with it.
     /// </summary>
     [Parameter(CaptureUnmatchedValues = true)]
     public Dictionary<string, object>? AdditionalAttributes { get; set; }
@@ -275,8 +280,8 @@ public partial class BackgammonPlayEntry : ComponentBase
 
     /// <summary>
     /// Point click — advance-then-make. An own checker on <paramref name="point"/>
-    /// advances from it (E1); if that is illegal the point holds no own checker, so
-    /// the click falls through to make-the-point on it (E2). The advance-first
+    /// advances from it; if that is illegal the point holds no own checker, so
+    /// the click falls through to make-the-point on it. The advance-first
     /// ordering plus the producer's own-occupied guard keep the dispatch board-blind
     /// — the component never inspects <see cref="MoveEntryState.CurrentPosition"/>.
     /// Illegal from both is a no-op.

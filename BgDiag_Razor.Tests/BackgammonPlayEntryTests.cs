@@ -252,8 +252,9 @@ public class BackgammonPlayEntryTests : BunitContext
         // The bounded-height contract's structural half: the diagram sits
         // inside .bg-board-slot (the shrinkable flex row), a direct child of
         // the wrapper, so a consumer-bounded height letterboxes the board.
-        // The layout half lives in the scoped CSS and was validated
-        // empirically; bUnit pins the markup structure it needs.
+        // The layout half lives in the scoped CSS and rests on a live-browser
+        // check (492b01a, the harness not kept); bUnit pins the markup structure
+        // it needs.
         var cut = Render<BackgammonPlayEntry>(p => p
             .Add(c => c.Request, StandardRequest()));
 
@@ -448,7 +449,7 @@ public class BackgammonPlayEntryTests : BunitContext
     [Fact]
     public async Task ClickEmptyUnreachablePoint_IsNoOp()
     {
-        // E2: a destination click tries make-the-point when advance is illegal. The
+        // A destination click tries make-the-point when advance is illegal. The
         // 1-point in the standard start is empty, unmakeable, AND unreachable on a
         // 3-1 — the nearest own checkers (6 and 8) are both more than 4 pips away, and
         // points 2-5 hold no own checker, so no single move and no combined 3-then-1
@@ -586,7 +587,7 @@ public class BackgammonPlayEntryTests : BunitContext
     public async Task ClickOwnOccupiedSource_StillAdvances_MakeNotEngaged()
     {
         // Two own checkers on 8, dice (3,1). The 8-point holds own checkers, so the
-        // click advances (E1) and never engages make (the producer rejects a make on
+        // click advances and never engages make (the producer rejects a make on
         // an own-occupied point). Two clicks play 8/5 (die 3) then 8/7 (die 1) — two
         // distinct single advances off the source. If the click had wrongly routed to
         // make, the own-occupied guard would make it a no-op and the play would never

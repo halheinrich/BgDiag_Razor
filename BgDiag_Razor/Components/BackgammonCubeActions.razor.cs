@@ -79,17 +79,18 @@ namespace BgDiag_Razor.Components;
 /// </para>
 ///
 /// <para>
-/// The row's <i>horizontal</i> metrics are a measured contract rather than free
-/// styling. This row is the widest element of the consuming quiz page's action
-/// row, and at its original metrics it out-widened the board and wrapped through
-/// the 641–1366px band, adding a line of chrome that cost board pixels wherever
-/// the board is height-bound. The compacted form — tight pill gap, tight pill
-/// inline padding, and a visually hidden radio dot (see below) — is the ruled
-/// resolution, and it is unconditional: no media query gates it, because a
-/// producer component has no view of the consumer's layout to gate one on.
-/// Re-widening any of the three reopens the wrap, so take a fresh measurement
-/// first. See the umbrella's <c>SPEC-quiz-view.md</c> §2 invariance floor and
-/// issue halheinrich/backgammon#99.
+/// The row's <i>horizontal</i> metrics are constants set against measurement,
+/// not free styling. This row is the widest element of the consuming quiz
+/// page's action row, and at its original metrics that row out-widened the
+/// checker row and wrapped through the 641–1366px band, adding a line of chrome
+/// that cost board pixels wherever the board is height-bound. The compacted form
+/// — tight pill gap, tight pill inline padding, and a visually hidden radio dot
+/// (see below) — is the ruled resolution, and it is unconditional: no media
+/// query gates it, because a producer component has no view of the consumer's
+/// layout to gate one on. Re-widening any of the three reopens the wrap, so take
+/// a fresh measurement first. See the umbrella's <c>SPEC-quiz-view.md</c> §2
+/// invariance floor and issue halheinrich/backgammon#99; each figure and its
+/// record are in this repo's <c>INSTRUCTIONS.md</c>.
 /// </para>
 ///
 /// <para>
@@ -106,11 +107,12 @@ namespace BgDiag_Razor.Components;
 /// </para>
 ///
 /// <para>
-/// Restyling the input away with <c>display: none</c>, <c>visibility: hidden</c>
-/// or a zeroed size would take it out of the tab order and the accessibility
-/// tree. So would the sr-only <c>clip-path</c> recipe, less visibly: that clips
-/// hit-testing as well as painting, leaving the control unreachable by pointer
-/// even though it still reads correctly to a screen reader.
+/// Restyling the input away with <c>display: none</c> or
+/// <c>visibility: hidden</c> would take it out of the tab order and the
+/// accessibility tree, and a zeroed size would leave it no hit area. The sr-only
+/// <c>clip-path</c> recipe fails less visibly: it clips hit-testing as well as
+/// painting, leaving the control unreachable by pointer even though it still
+/// reads correctly to a screen reader.
 /// </para>
 ///
 /// <para>
@@ -215,8 +217,12 @@ public partial class BackgammonCubeActions : ComponentBase
     public bool ShortLabels { get; set; }
 
     /// <summary>
-    /// Catch-all for arbitrary HTML attributes (e.g. <c>style</c>, <c>id</c>,
-    /// <c>class</c>) splatted onto the root <c>div</c> (<c>bg-cube-actions</c>).
+    /// Catch-all for arbitrary HTML attributes (e.g. <c>style</c>, <c>id</c>, a
+    /// <c>data-</c> attribute) splatted onto the root <c>div</c>
+    /// (<c>bg-cube-actions</c>), after its class and the group's role and name,
+    /// so a host attribute of the same name wins. A host <c>class</c> therefore
+    /// replaces <c>bg-cube-actions</c>: the live row loses its styling and stops
+    /// matching its inert copy (halheinrich/backgammon#338).
     /// </summary>
     [Parameter(CaptureUnmatchedValues = true)]
     public Dictionary<string, object>? AdditionalAttributes { get; set; }

@@ -37,9 +37,9 @@
    The horizontal metrics below (pill gap, pill inline padding, and the hidden
    radio) are load-bearing at the consumer, not free styling: this row is the
    widest element of the consuming quiz page's action row, and at its former
-   metrics it out-widened the board and wrapped through the 641–1366px band,
-   adding a chrome line that cost board pixels wherever the board is
-   height-bound. Compacting them is the ruled resolution — umbrella
+   metrics that row out-widened the checker row and wrapped through the
+   641–1366px band, adding a chrome line that cost board pixels wherever the
+   board is height-bound. Compacting them is the ruled resolution — umbrella
    SPEC-quiz-view.md §2's invariance floor, halheinrich/backgammon#99. The
    compact form is unconditional: there is no media query here, because a
    producer component has no view of the consumer's layout to gate one on.
