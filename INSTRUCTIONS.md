@@ -3,1164 +3,735 @@
 > Collaboration contract: [`../AGENTS.md`](../AGENTS.md)
 > Umbrella status & dependency graph: [`../INSTRUCTIONS.md`](../INSTRUCTIONS.md)
 > Mission & principles: [`../VISION.md`](../VISION.md)
+> Open work: the [tracker](https://github.com/halheinrich/backgammon/issues), label `BgDiag_Razor`.
+> Repo: https://github.com/halheinrich/BgDiag_Razor, branch `main`.
 
-## Stack
+## What it is for
 
-C# / .NET 10 / Razor Class Library (`Microsoft.NET.Sdk.Razor`) / bUnit.
-Visual Studio 2026 on Windows.
+The Blazor face of the board. `BackgammonDiagram_Lib` draws a position as SVG
+and stays free of any Blazor dependency; this library binds that drawing into
+a component, turns clicks on it into events, and adds the two widgets that take
+a user's answer to a decision: click-by-click play entry for a checker play,
+and an answer row for a cube decision. BgQuiz_Blazor uses all of it;
+BgArena_Blazor draws its replays with the view-only board.
 
-## Solution
+C# / .NET 10 Razor Class Library (`Microsoft.NET.Sdk.Razor`), tested with bUnit
+over xUnit.
 
-`D:\Users\Hal\Documents\Visual Studio 2026\Projects\backgammon\BgDiag_Razor\BgDiag_Razor.slnx`
+## Using it
 
-## Repo
+Four components, all in namespace `BgDiag_Razor.Components`. Each member's XML
+doc states its contract, and `GenerateDocumentationFile` builds them on every
+build. This file holds what those cannot: which one to reach for, why each is
+built as it is, and what to avoid.
 
-https://github.com/halheinrich/BgDiag_Razor — branch `main`.
+| A host wants | It renders | It passes | It hears |
+|---|---|---|---|
+| a position shown, perhaps clicked | `BackgammonDiagram` | `Request` | one callback per clickable region |
+| a checker play entered by clicks | `BackgammonPlayEntry` | a checker-play decision's `Request` | `OnPlayCompleted`, `OnSubmitRequested` |
+| a cube decision answered | `BackgammonDiagram` for the board, `BackgammonCubeActions` for the answer | `Decision`, `Value` | `ValueChanged` |
+| the widest the cube row can be, before any cube decision | `BackgammonCubeActionsRuler` | `ShortLabels` | nothing: it measures the root |
+
+A host routes by the record's kind (`BgDecisionData.Match` / `Switch`, or a
+type test as here) and builds the request from the record:
+
+```razor
+@if (decision is CubeDecision cube)
+{
+    <BackgammonDiagram Request="DiagramRequest.ForDecision(cube, ranking)" />
+    <BackgammonCubeActions @bind-Value="_answer" Decision="cube" />
+}
+else
+{
+    <BackgammonPlayEntry @ref="_entry"
+                         Request="DiagramRequest.ForDecision(decision, ranking)"
+                         OnPlayCompleted="HandlePlay"
+                         OnSubmitRequested="SubmitAsync" />
+}
+```
+
+The scoped stylesheets (the pills, the play-entry column, the ruler's box)
+reach a page in the bundle a Blazor host links as `{Assembly}.styles.css`, so a
+host of any of those three components needs that link. `BackgammonDiagram` has
+no stylesheet and needs none: its styles are inline.
+
+## Build and test
+
+The solution is `BgDiag_Razor.slnx`. It needs the umbrella checkout: four of its
+six projects are siblings reached by relative path. From this directory:
+
+```bash
+dotnet build BgDiag_Razor.slnx
+```
+
+```bash
+dotnet test BgDiag_Razor.slnx
+```
+
+The suite takes seconds and reads nothing from `TestData/`.
+
+**What a green run says.** bUnit has no CSS engine and lays nothing out. The
+suite checks markup, events, the sources read as text, and the compiled
+stylesheet's rules: which selectors reach a rendered element, and which declared
+value wins there. It does not check rendered geometry. The figures and layout
+claims in this file are separate evidence: live-browser checks recorded in
+commit messages and not repeatable from this repo. "What backs the layout
+claims" and "The horizontal metrics" below give each one's record and its
+limits. Whether the ruler's width agrees with the live row under real fonts is
+the consumer's browser check.
 
 ## Depends on
 
-- **BackgammonDiagram_Lib** — `DiagramRequest` (a decision's request, and
-  `WithWorkingBoard`, its redraw of a checker play's board mid-entry),
-  `DiceOrder`, `DiagramOptions`, `DiagramRenderer`, `BoardHitRegions`,
-  `SvgViewBox`, `HitRect`, and `CubeLabels`, the one spelling of a cube
-  answer, full and short — `BackgammonCubeActions` labels every pill through
-  it, at the decision, and `BackgammonCubeActionsRuler` draws every spelling
-  it lists without one (`CubeLabels.Spellings`, each a
-  `CubeAnswerSpelling`). Referenced as a project reference, not a package.
-- **BgDataTypes_Lib** — `CheckerPlayDecision` (the decision kind play entry
-  takes), `CubeDecision` (the decision kind the cube row answers),
-  `BoardPosition` (readonly struct, the position value), `Play` (struct),
-  `CubeAnswer` (enum, the four cube answers). Consumed here by
-  `BackgammonPlayEntry` (the checker-play record a request presents, read for
-  its board and roll; `BoardPosition` value equality for the reset key;
-  `Play` on the public surface), by `BackgammonCubeActions` (`CubeAnswer` on
-  the public surface, its declaration order the offered order; the
-  `CubeDecision` it is handed, passed to the label home and read for nothing
-  else), and by tests. Referenced as a project reference (also
-  reachable transitively via BackgammonDiagram_Lib and BgMoveGen, but the
-  explicit ref documents the direct dependency and insulates against future
-  transitive-edge churn).
-- **BgMoveGen** — `MoveEntryState`, `ClickOutcome`. Drives
-  `BackgammonPlayEntry`'s click-by-click play assembly. Referenced as a
-  project reference. Transitively brings `BgMoveGen`'s standalone surface;
-  this subproject does not consume the NativeAOT interop layer.
+All three are project references.
+
+- **BackgammonDiagram_Lib** — `DiagramRequest` and `DiceOrder`, `DiagramOptions`,
+  `DiagramRenderer`, `BoardHitRegions` with `HitRect` and `SvgViewBox`,
+  `SvgFormat`, and `CubeLabels` with `CubeAnswerSpelling`. `BackgammonDiagram`
+  renders through it, `BackgammonPlayEntry` redraws its board with
+  `WithWorkingBoard`, `BackgammonCubeActions` labels every pill through
+  `CubeLabels`, at the decision, and `BackgammonCubeActionsRuler` draws every
+  spelling `CubeLabels.Spellings` lists, at no decision. What each of those does
+  is that library's `INSTRUCTIONS.md`'s to state: "DiagramRequest", "Cube
+  wording: `CubeLabels`" and "Hit regions".
+- **BgDataTypes_Lib** — `CheckerPlayDecision` (the kind play entry takes),
+  `CubeDecision` (the kind the cube row answers), `BoardPosition` (its value
+  equality is the reset key), `Play` and `CubeAnswer` (on the public surface;
+  the enum's declaration order is the offered order). Also reachable through
+  the other two, and referenced directly so a change in their edges cannot
+  take it away.
+- **BgMoveGen** — `MoveEntryState` and `ClickOutcome`, which drive
+  `BackgammonPlayEntry`. The NativeAOT interop layer is not consumed.
 
 Test-only:
 
 - **BgDataTypes_Lib.TestSupport** — `TestRecords`, the producer's record
-  builders: the one way the play-entry tests build the decision records their
-  requests are made from, so no test here restates a record's construction.
-  Listed in `BgDiag_Razor.slnx`, which holds every in-tree project the build
-  reaches.
+  builders: the one way these tests build the decision records their requests
+  are made from, so no test here restates a record's construction.
 
-`BackgammonCubeActions` consumes `CubeAnswer` and `CubeDecision` from
-`BgDataTypes_Lib` and `CubeLabels` from `BackgammonDiagram_Lib`, and nothing
-else from either. Its inert copy, `BackgammonCubeActionsRuler`, consumes
+The cube row's reach is deliberately small. `BackgammonCubeActions` consumes
+`CubeAnswer` and `CubeDecision` from BgDataTypes_Lib and `CubeLabels` from
+BackgammonDiagram_Lib, and nothing else from either. Its inert copy consumes
 `CubeAnswer` and `CubeLabels.Spellings` with its `CubeAnswerSpelling`, and no
-decision at all. No `BgMoveGen` use — cube decisions have no checker-move
-state to drive — and none of the diagram library's rendering: the answer row
-is board-free.
+decision at all. Neither uses BgMoveGen, since a cube decision has no checker
+moves to assemble, or the diagram library's rendering, since the row is
+board-free.
 
 ## Layout
 
-Two projects under `BgDiag_Razor.slnx`, governed by repo-root
-`Directory.Build.props` (TFM, `TreatWarningsAsErrors`, XML doc generation)
-and `Directory.Packages.props` (Central Package Management).
+Two projects here, governed by repo-root `Directory.Build.props` (TFM,
+`TreatWarningsAsErrors`, XML doc generation) and `Directory.Packages.props`
+(Central Package Management). `BgDiag_Razor.slnx` lists them and the four
+outside projects the build reaches.
 
 **`BgDiag_Razor/`** — the Razor class library: four components under
 `Components/`, each a `.razor` markup file with its code-behind, and a scoped
-`.razor.css` where it styles its own markup. It ships no static assets.
+`.razor.css` where it styles its own markup. Nothing lives under `wwwroot/`; the
+compiled scoped-CSS bundle is the library's only web asset.
 
 - **`BackgammonDiagram`** — the view-only board: the core lib's SVG injected
-  beneath a transparent click overlay built from the same hit-region
-  geometry.
-- **`BackgammonPlayEntry`** — the stateful play-entry widget for a
-  checker-play decision: wraps `BackgammonDiagram`, drives a `MoveEntryState`
-  from its clicks, reports each completed `Play`. Its scoped CSS is the
-  bounded-height board slot.
+  beneath a transparent click overlay built from the same hit-region geometry.
+- **`BackgammonPlayEntry`** — the stateful play-entry widget for a checker-play
+  decision: wraps `BackgammonDiagram`, drives a `MoveEntryState` from its
+  clicks, reports each completed `Play`. Its scoped CSS is the bounded-height
+  board slot.
 - **`BackgammonCubeActions`** — the free-standing cube answer row: one radio
-  group of the four `CubeAnswer`s, labelled at the decision, under a
-  controlled-value contract.
-  Its scoped CSS is the pill styling, whose horizontal metrics are
-  load-bearing at the consumer (see the file's header). Its markup file
-  holds the pill row's markup, which its inert copy draws too.
-- **`BackgammonCubeActionsRuler`** — the cube answer row's inert copy, for a
-  host to measure: every state the row can show, drawn by the row's own
-  markup, in a box as wide as the widest. Its scoped CSS is that box alone.
+  group of the four `CubeAnswer`s, labelled at the decision, strictly
+  controlled. Its scoped CSS is the pill styling, and its markup file holds the
+  pill row's markup, which its inert copy draws too.
+- **`BackgammonCubeActionsRuler`** — that row's inert copy, for a host to
+  measure: every state the row can show, in a box as wide as the widest. Its
+  scoped CSS is that box alone.
 
-**`BgDiag_Razor.Tests/`** — bUnit over xUnit, one test class per component:
-rendering and event callbacks for the diagram, the play-entry and
-cube-actions contracts, and the cube row's inert copy. A fifth class pins the
-library's trim posture (see "Thin wrapper, by design"). Three helpers serve
-the cube classes: `CubeDecisions` (the two decisions both answer),
-`ComponentSources` (a component's sources as text, comments stripped) and
-`CompiledStylesheet` (the rules of the compiled scoped-CSS bundle, and the
-cascade of their declared values onto a rendered element).
+**`BgDiag_Razor.Tests/`** — bUnit over xUnit: one test class per component, plus
+`BgDiagRazorTrimPostureTests` (see "Thin wrapper, by design"). Three helpers
+serve the cube classes, and a nested parent serves the play-entry class:
+
+- `CubeDecisions` — the two decisions, gammons possible and not, that the live
+  row's tests and its copy's both answer.
+- `ComponentSources` — a component's sources as text, comments stripped, for
+  what a render cannot pin.
+- `CompiledStylesheet` — the rules of the compiled scoped-CSS bundle, and the
+  cascade of their declared values onto a rendered element.
+- `EntryHost`, inside `BackgammonPlayEntryTests` — a parent that binds the entry
+  through its own render tree by parameter name, as compiled Razor does, for
+  the tests of the wire from a click to the parent's markup.
 
 ## Architecture
 
 ### Thin wrapper, by design
 
-This subproject exists so that `BackgammonDiagram_Lib` can stay free of any
-Blazor / Razor dependency. All SVG generation and hit-region geometry lives
-in the core lib; this project only binds that output into a Blazor component
-and surfaces click events.
+All SVG generation and hit-region geometry lives in the core lib; this project
+only binds that output into components and surfaces click events.
 
 The wrapper is held trim-safe by its own build. BgQuiz's WebAssembly client
 ships this assembly and publishes it trimmed with trim warnings as errors, so
 the library's csproj declares `IsTrimmable` and turns on `EnableTrimAnalyzer`
 (the Razor SDK enables neither by itself). Under the repo-wide
 `TreatWarningsAsErrors`, any construct the trimmer cannot analyze — a
-reflection-bound serializer call, a `Type.GetType` on a computed name —
-becomes a build error in this repo, in the change that introduces it, rather
-than a failure at the consumer's publish (`halheinrich/backgammon#197`). The
-declaration is pinned by `BgDiagRazorTrimPostureTests`, which reads the
-SDK-emitted `IsTrimmable` assembly metadata; the analyzer switch leaves no
-such trace, so the build is its only check. The test project carries neither
-setting: it ships nowhere.
+reflection-bound serializer call, a `Type.GetType` on a computed name — becomes
+a build error here, in the change that introduces it, rather than a failure at
+the consumer's publish (`halheinrich/backgammon#197`). The declaration is pinned
+by `BgDiagRazorTrimPostureTests`, which reads the SDK-emitted `IsTrimmable`
+assembly metadata; the analyzer switch leaves no such trace, so the build is its
+only check. The test project carries neither setting: it ships nowhere.
 
-### Four components: view-only, play-entry, cube-actions, and its inert copy
+### Why four components
 
-`BackgammonDiagram` is the **view-only primitive** — given a `DiagramRequest`
-it renders the position and surfaces click events. It holds no
-position-manipulation state. View-only consumers (replay viewers, bot-vs-bot
-playback, analytics inspection) use it directly.
+`BackgammonDiagram` is the view-only primitive: it holds no
+position-manipulation state, and view-only consumers (replay viewers, bot-vs-bot
+playback, analytics inspection) use it directly. `BackgammonPlayEntry` composes
+it and owns the click-by-click state. `BackgammonCubeActions` renders no board
+and takes the record, not a `DiagramRequest`: a cube decision has no
+click-by-click board state, so unlike the play half there is nothing for an
+entry wrapper to encapsulate. A cube consumer renders the position with
+`BackgammonDiagram` and places the row wherever its layout wants it, keeping the
+board region board-only. The row emits the raw answer; what that answer costs at
+the decision (`CubeDecision.CostOf`) is the quiz layer's to ask the producer.
 
-`BackgammonPlayEntry` is the **stateful play-entry widget** — it composes
-`BackgammonDiagram` and drives a `BgMoveGen.MoveEntryState` from its click
-events, redrawing the board from the intermediate position after each legal
-click and reporting the assembled `Play` once the user has clicked a
-complete legal sequence. Handles checker-play decisions only (a
-`CheckerPlayDecision`'s request); any other request is refused at the
-contract boundary.
+The split keeps the encapsulation clean: a consumer that only displays a
+position pays for no click state, a play consumer wires no move-entry state of
+its own, and a cube consumer accepts no board-bundled layout to get a row of
+radios.
 
-`BackgammonCubeActions` is the **free-standing cube answer row** — one radio
-group offering the four cube answers (`CubeAnswer`) at every decision, with a
-controlled `Value` / `ValueChanged` contract (`@bind-Value` capable), a
-required `Decision` (the `CubeDecision` being answered, at which every pill
-is labelled) and an optional, host-chosen short form. It renders no board and
-takes the record, not a `DiagramRequest`: a cube decision has no
-click-by-click board state, so — unlike the play half — there is nothing for
-an entry wrapper to encapsulate. Cube consumers render the position with
-`BackgammonDiagram` and place the answer row wherever their layout wants it
-(e.g. inline in a button row), keeping the board region board-only. It emits
-the user's raw answer; what that answer costs at the decision is the quiz
-layer's to ask the producer.
+`BackgammonCubeActionsRuler` takes no decision, so it is not routed to. A host
+renders it once, before any problem, to size its row.
 
-The split keeps the encapsulation rule clean: a consumer that just wants to
-display a position should not pay for click-by-click state machinery, a
-play consumer should not have to wire move-entry state externally to a
-view-only component, and a cube consumer should not have to accept a
-board-bundled layout just to get a row of radios. Consumers route by the
-record's kind (`BgDecisionData.Match` / `Switch`): a `CheckerPlayDecision`
-→ `BackgammonPlayEntry`; a `CubeDecision` → `BackgammonDiagram` +
-`BackgammonCubeActions`.
+### BackgammonDiagram: rendering
 
-Beside the three, `BackgammonCubeActionsRuler` is the cube answer row's
-**inert copy**, which a host measures and nobody answers. It takes no
-decision, so it is not routed to: a host renders it once, before any
-problem, to size its row (see "BackgammonCubeActionsRuler — the inert copy"
-below).
+`OnParametersSet` is the single render hook, and `DiagramRenderer` is static, so
+the component holds no renderer state, only the cached outputs. A null `Request`
+clears them and renders nothing. Otherwise it caches `RenderSvg` and
+`GetHitRegions` and builds `_rootStyle` for the `.bg-diagram` root.
 
-### Render pipeline
+The root's style is inline for two reasons. The aspect ratio tracks
+`DiagramOptions.Aspect` at render time, which scoped CSS cannot express; and
+`position: relative`, the overlay's positioning context, stays inline so the
+overlay never depends on a host having linked the scoped bundle (`a7c8603`).
 
-`BackgammonDiagram` is a `ComponentBase` with `[Parameter]` `Request` (nullable
-`DiagramRequest`) and `Options` (`DiagramOptions`, defaulted). `DiagramRenderer`
-is a static class in the lib, so rendering is a direct static call — the
-component holds no renderer state, only the cached outputs.
+The drawing goes in as `(MarkupString)_svgMarkup`, inside a child `div` with
+`pointer-events: none`. That injection and the separate overlay exist because
+the lib returns one SVG string. If it ever exposes a structured render API, the
+injection could become a native Razor SVG tree and the overlay `<rect>`s could
+join that tree, dropping the pointer-events and stacking plumbing and the
+`MarkupString`.
 
-`OnParametersSet` is the single render hook:
+### BackgammonDiagram: the click overlay
 
-- If `Request` is null, both `_svgMarkup` and `_hitRegions` are cleared and
-  the component renders nothing.
-- Otherwise, it calls `DiagramRenderer.RenderSvg(Request, Options)` and
-  `DiagramRenderer.GetHitRegions(Request, Options)` and caches both in fields.
-- It then builds `_rootStyle` for the `.bg-diagram` root — `position: relative`
-  (the overlay's positioning context) plus `aspect-ratio: <W> / <H>` derived
-  from `_hitRegions.ViewBox` — so the component is intrinsically sizable (see
-  the self-sizing pitfall). The ratio is render-time dynamic (it tracks
-  `DiagramOptions.Aspect`), which is why it is injected inline rather than
-  living in scoped CSS, and it is sourced from the same viewBox the overlay
-  uses so the ratio has a single source. The style also carries the
-  contain-fit default — `max-height: 100%; margin-inline: auto` — so a
-  consumer that gives the containing block a *definite* height gets a
-  centered letterbox for free, while unbounded (width-driven) flows are
-  untouched (see the contain-fit pitfall).
+Click handling is pure Razor, no JS interop. A second `<svg>` is positioned
+absolutely over the drawing and sized from `BoardHitRegions.ViewBox`, so it
+aligns 1:1 with the lib's coordinates. Each `HitRect` becomes a `<rect>` with
+`fill="transparent"`, `pointer-events="all"`, and an `@onclick`:
 
-The markup then injects `_svgMarkup` via `(MarkupString)_svgMarkup` inside a
-child `div` that has `pointer-events: none` so clicks fall through to the
-overlay.
+- `Points` → one rect per point; `OnPointClicked` with the point index, 1–24.
+- `Bar` → `OnBarClicked`, always 25.
+- `OnRollTray` (nullable) → `OnTrayClicked`.
+- `Candidates` → one rect per candidate row the play panel draws, in ascending
+  key order; `OnCandidateClicked` with the key: the candidate's stored index
+  into the decision's plays, under any ranking, ceiling or rescue, never its row
+  position. Empty unless a Solution-mode checker play's panel is drawn.
+- `Dice` (nullable: a cube decision has none) → `OnDiceClicked`. The view
+  forwards the click and does not interpret it.
 
-### Transparent SVG click overlay
+`Cube` and `OpponentTray` get no rect. A point highlight, if a consumer ever
+asks for one, belongs here too: drawn from the same `BoardHitRegions`, so the
+index-to-rect mapping stays inside `BackgammonDiagram`. `BackgammonPlayEntry`
+could then forward `MoveEntryState.LegalNextClicks`, declared
+`IReadOnlyCollection<int>`, which lists sources only, not destinations. Its
+original design had such a hint parameter, dropped to keep the public surface
+small.
 
-Click handling is pure Razor — no JS interop. A second `<svg>` element is
-positioned absolutely over the rendered diagram, sized via the
-`BoardHitRegions.ViewBox` so it aligns 1:1 with the lib's SVG coordinate
-system. Each `HitRect` in the region map becomes a `<rect>` with
-`fill="transparent"`, `pointer-events="all"`, and an `@onclick` that invokes
-the matching `EventCallback`:
+**Rect order is a contract.** Rects are emitted in the order above, so the first
+rect is point 1, the 25th the bar, and the last the dice wherever dice are
+drawn. BgQuiz's e2e and this repo's click tests read them by position.
 
-- `Points` dictionary → one `<rect>` per point, invokes `OnPointClicked` with
-  the point index (1–24).
-- `Bar` → invokes `OnBarClicked(25)`.
-- `OnRollTray` (the on-roll player's bearing-off tray, nullable) → invokes
-  `OnTrayClicked`.
-- `Candidates` dictionary → one `<rect>` per candidate row the play panel
-  draws, in ascending key order, invokes `OnCandidateClicked` with the key:
-  the candidate's stored index into the decision's plays, as given, under any
-  ranking, ceiling or rescue — never its row position. Empty, so no rects,
-  unless a Solution-mode checker play's panel is drawn.
-- `Dice` (nullable) → invokes `OnDiceClicked`.
-
-Rects are emitted in that order — points, bar, tray, candidate rows, dice —
-so the first rect is point 1, the 25th the bar, and the last the dice
-wherever dice are drawn; consumers' positional readings rely on this
-(BgQuiz's e2e, this repo's click tests).
+**Rects are addressable.** Each point's rect carries `data-point="N"`, the index
+the callback reports, and each candidate's `data-candidate="i"`, its stored
+index, whatever row it is drawn on; no other rect carries either. So
+`rect[data-point="7"]` is point 7 and `rect[data-candidate]` is exactly the
+drawn rows. These are for out-of-process drivers, since a browser-automation
+harness cannot bind an `EventCallback` (`halheinrich/backgammon#13`). They are
+plain `data-` attributes rather than `id`s because they repeat across two
+diagrams on one page. Styling the rows (a pointer cursor, say) is the host's CSS
+against that selector.
 
 **Candidate clicks stop propagating.** The candidate rects carry
-`@onclick:stopPropagation="true"`: a click that shows a play is the
-component's to report and ends there, so a host's Blazor `@onclick` on an
-ancestor — the quiz page's "click elsewhere restores the played position"
-(`SPEC-quiz-view.md` §1, showing a play) — never sees it as a click outside
-the list. Every other region propagates, since a click on the board is a
-click outside the list. The stop is limited to the Blazor scope and does
-not extend to the HTML DOM: a JavaScript listener still sees the click, so
-a host that needs the stop must use a Blazor handler.
+`@onclick:stopPropagation="true"`: a click that shows a play is the component's
+to report and ends there, so a host's Blazor `@onclick` on an ancestor — the quiz
+page's "click elsewhere restores the played position" (`SPEC-quiz-view.md` §1,
+showing a play) — never sees it as a click outside the list. Every other region
+propagates, since a click on the board is a click outside the list. The stop is
+limited to the Blazor scope and does not extend to the HTML DOM: a JavaScript
+listener still sees the click, so a host that needs the stop must use a Blazor
+handler.
 
-The overlay is the second child of the outer wrapper so it sits above the
-pointer-events-disabled diagram in stacking order.
+### Host attributes
 
-**Point rects are addressable**: each point's `<rect>` carries
-`data-point="N"` (N = 1–24, the same index the callback reports), and no other
-region's rect carries the attribute — so `rect[data-point]` is exactly the
-point set and `rect[data-point="7"]` is point 7. This is for out-of-process
-drivers: a browser-automation harness cannot bind an `EventCallback`, and
-before the attribute its only handle was the overlay's render order (rect
-index = point − 1), a positional contract documented at the consumer and never
-stated by the producer (`halheinrich/backgammon#13`). Render order is
-unchanged, so the positional reading still holds and is test-pinned alongside
-the attribute; it is simply no longer the only one. A plain `data-` attribute
-rather than an `id`, deliberately: it repeats across two diagrams on one page
-without minting duplicate ids.
+Every component captures unmatched attributes in `AdditionalAttributes` and
+splats them on its root. Of two same-named attributes the later wins, so what a
+host's `class` or `style` does depends on where each component splats:
 
-**Candidate rects are addressable** for the same reason: each carries
-`data-candidate="i"` (i the candidate's stored index, the key the callback
-reports), and no other rect carries it — so `rect[data-candidate]` is exactly
-the drawn rows and `rect[data-candidate="5"]` is stored candidate 5, whatever
-row it is drawn on. Styling the rows (a pointer cursor, say) is the host's
-CSS against that selector.
+| Component | Splatted | A host `class` | A host `style` |
+|---|---|---|---|
+| `BackgammonDiagram` | after `class` and `style` | replaces `bg-diagram` | replaces the root's inline style (see the pitfall "Size through the container") |
+| `BackgammonPlayEntry` | after `class` | replaces `bg-play-entry`, so the scoped column and the bounded-height contract go with it | applies |
+| `BackgammonCubeActions` | after `class` and the group's role and name | replaces `bg-cube-actions`: the live row loses its styling and stops matching its inert copy (`halheinrich/backgammon#338`) | applies |
+| `BackgammonCubeActionsRuler` | before its class, `aria-hidden` and `inert` | refused | refused |
 
-### BackgammonDiagram — catch-all attributes
+`data-` attributes and `id` are safe everywhere, and are how a host finds a
+component. `BackgammonPlayEntry`'s splat reaches its own wrapper, a separate
+element above the inner diagram's root; it does not forward attributes to the
+inner diagram.
 
-`[Parameter(CaptureUnmatchedValues = true)] Dictionary<string, object>? AdditionalAttributes`
-is splatted onto the outer `bg-diagram` wrapper `div` via `@attributes`, so
-consumers can pass `style`, `id`, `class`, etc. without modifying the component.
+### Sizing: the ratio, contain-fit and the board slot
 
-### BackgammonPlayEntry — render pipeline
+**One dimension sizes the board.** The `.bg-diagram` root carries `aspect-ratio:
+<W> / <H>` from `_hitRegions.ViewBox`, the viewBox the overlay uses, so the
+ratio has one source. A host gives the box a definite width or a definite
+height, through a stretching or sized container (grid track, flex, explicit
+dimension), and the box keeps the board's ratio without any host re-encoding it.
+The overlay is absolutely positioned at `width/height: 100%`, so it covers the
+box under any sizing.
 
-`BackgammonPlayEntry` takes the same `DiagramRequest` / `DiagramOptions`
-shape as `BackgammonDiagram` plus an `EventCallback<Play> OnPlayCompleted`.
-The request is a checker-play decision's own: `DiagramRequest.ForDecision`
-from a `CheckerPlayDecision`, varied with whatever options the consumer
-draws it with. Internally:
+**The contain-fit default rides the same inline style:** `max-height: 100%;
+margin-inline: auto`. When the containing block has a definite height, the board
+caps to it, the width re-derives through the ratio (CSS transfers the max
+constraint across it), and the auto margins centre the letterboxed board. In an
+unbounded flow both are inert: a percentage max-height against an indefinite
+containing-block height computes to `none`, and the auto margins are zero while
+the box fills its row. So width-driven consumers (a plain `max-width` container)
+are unchanged.
 
-- `_state` holds a `MoveEntryState`, constructed from the record's board
-  (`CheckerPlayDecision.Board`, a `BoardPosition`) and its roll in rolled
-  order (`Decision.Dice`).
-- `_renderedRequest` is the `DiagramRequest` actually handed to the inner
-  `BackgammonDiagram`: the request's own redraw of the entry's position,
-  `Request.WithWorkingBoard(_state.CurrentPosition, diceOrder)`, rebuilt on
-  every state change and used from the first render. **The board during
-  entry is not a decision record** (Hal, 2026-09-28, on
-  `halheinrich/backgammon#273`): the component builds no record, session or
-  display facts; the diagram library draws the working board with its
-  decision's presentation — names, source, cube, score and roll — derived
-  from the record, and keeps the request's options. A working board has no
-  analysis and no XGID, so a request's `Mode` and `ShowXgid` do not show
-  during entry.
-- Click handlers implement **one-click source-advance**: `OnPointClicked` /
-  `OnBarClicked` route through
-  `_state.TryAdvanceFrom(point, diePreference)` — a single click commits one
-  move from that source, the die chosen by `diePreference` (the rendered dice
-  order, leftmost first; see the dice swap below). `OnTrayClicked` routes
-  through `_state.TryBearOffMax()` — the bear-off-max shortcut, which bears off
-  the maximum number of checkers when that is unambiguous. Both rebuild
-  `_renderedRequest` on any outcome other than `Illegal`; `PlayCompleted` fires
-  `OnPlayCompleted`.
-- The dice click (`OnDiceClicked`) is display/submit, not entry: on a complete
-  play it fires `OnSubmitRequested`; on an incomplete play it toggles a
-  display-only dice swap (a no-op for doubles) — the `DiceOrder` the working
-  board draws the roll in — that reorders only the rendered dice, and thereby
-  which die a one-click advance prefers. The incoming `Request` and
-  `MoveEntryState` are untouched, so the swap never disturbs the reset key or
-  in-progress entry.
+**`BackgammonPlayEntry` carries that through its wrapper.** It renders the
+diagram inside an internal `bg-board-slot` div. Its scoped CSS makes
+`.bg-play-entry` a flex column and the slot the shrinkable row (`min-height: 0`;
+deliberately the default `flex: 0 1 auto`, so the slot shrinks under a bound but
+never grows).
 
-`AdditionalAttributes` is splatted onto `BackgammonPlayEntry`'s own outer
-`bg-play-entry` wrapper `div` — a separate wrapper above the inner
-`BackgammonDiagram`'s `bg-diagram` wrapper, not the same element. Consumers
-that style the play-entry widget target `bg-play-entry`; the inner diagram's
-splat surface is reached via the inner component's own parameter, which
-this component does not forward.
+- **Bounded:** a host gives the wrapper a definite height, a real `height` or
+  shrinkable-flex-item sizing (`flex: 1 1 0; min-height: 0` in a definite-height
+  column). The slot shrinks to the bound, its post-flex height becomes definite,
+  and `.bg-diagram`'s `max-height: 100%` caps the board to it.
+- **Unbounded:** a column flex with auto height stacks like block flow, the slot
+  never grows, and the percentage resolves to none, so the board stays
+  width-driven.
 
-### Reset semantics — the decision's start, by value
+The wrapper has no sibling chrome today; the slot keeps the height-cappable
+structure explicit so chrome can join it later, as `flex: none` siblings of the
+slot, without changing the host's contract.
 
-A fresh `MoveEntryState` is constructed only when the incoming decision's
-start — its board, compared by `BoardPosition`'s value equality (the one
-"same position"), and its roll in rolled order — differs from the start the
-current entry state was built from. The component keeps the start board; the
-roll half is the entry state's own `Die1` / `Die2`. Re-passing a request with
-the same start — even a distinct request, or a distinct record — preserves
-any in-progress click state, and the board is redrawn from the new request,
-so its options and presentation follow it. A different board or roll
-triggers a reset.
+**What backs the layout claims.** The suite pins the structure these rest on:
+the emitted style (`Root_CarriesContainFitDefault` and the aspect-ratio tests),
+the diagram inside the slot, and no inline sizing on it (`BoardSlot_WrapsDiagram`,
+`BoardSlot_CarriesNoInlineSizing`). No test pins the layout, which bUnit cannot
+render. The layout itself rests on live-browser runs recorded in commit messages,
+whose harnesses were not kept:
 
-This decouples reset behavior from object identity: consumers can rebuild a
-`DiagramRequest` for any reason (parent-state churn, a settings change, etc.)
-without losing mid-click progress, while advancing to a problem with another
-board or roll resets.
+- `a7c8603` (2026-07-07), a scratch replica of the DOM in a browser preview: a
+  height-driven grid item resolves to a correct-ratio box, 533×300 at 16:9, with
+  the overlay covering it.
+- `83329dd` and `492b01a` (2026-07-08), run before implementation: bounded flows
+  letterbox with the ratio preserved and centre; with the slot, unbounded flow is
+  pixel-identical to the structure before it; a width-driven parent of indefinite
+  height (BgArena's `ReplayBoard` shape) is unaffected; and a `max-height` on an
+  auto-height ancestor does not engage the contract, because content is sized
+  before the clamp and simply overflows it.
+- BgQuiz_Blazor `c62a66d` (2026-07-08), the real page under the 16:9 default at
+  1280×800 and 1280×430: play entry unbounded at 922×519 and letterboxed to
+  500×281, with no page overflow.
 
-### Decision-kind guard
+Those runs cover the mechanism in one browser, at those sizes, on the page as it
+then was. The slot's rules and the inline contain-fit declarations have not
+changed since. A change to either, or a host layout unlike these, is a reason to
+check in a browser again.
 
-Only a checker-play decision is entered. `OnParametersSet` refuses any other
-request — a cube decision's, a board's (`DiagramRequest.ForBoard`), or a
-working board's handed back in — with an `ArgumentException` whose
-`ParamName` is `Request`, naming the correct composition (`BackgammonDiagram`
-for the position, `BackgammonCubeActions` for a cube answer). The intent is
-to fail loudly at the contract boundary rather than silently render an
-unusable widget. `ArgumentException` because the fault is the parameter's
-value, a request of the wrong kind.
+### BackgammonPlayEntry: entering a checker play
 
-The refusal is a run-time one: a `DiagramRequest` carries its decision as
-`BgDecisionData`, not its kind, so the parameter's type cannot require a
-checker play. The kinded records make the routing a compile-time fact one
-step earlier, at the consumer, which holds a `CheckerPlayDecision` or a
-`CubeDecision` when it builds the request. The cube side needs no run-time
-guard: `BackgammonCubeActions` takes the `CubeDecision` itself, so its
-parameter's type refuses any other kind at compile time.
+The request is a checker-play decision's own: `DiagramRequest.ForDecision` from a
+`CheckerPlayDecision`, varied with whatever options the consumer draws it with.
 
-### BackgammonCubeActions — markup and the one group
+**The board drawn is the request's own redraw.** `_state` is a `MoveEntryState`
+built from the record's board and its roll in rolled order. `_renderedRequest`,
+what the inner `BackgammonDiagram` gets, is
+`Request.WithWorkingBoard(_state.CurrentPosition, diceOrder)`, rebuilt on every
+state change and used from the first render. **The board during entry is not a
+decision record** (Hal, 2026-09-28, on `halheinrich/backgammon#273`): the
+component builds no record, session or display facts. What the redraw keeps is
+`WithWorkingBoard`'s to state. The consequence here is that a request's `Mode`
+and `ShowXgid` do not show during entry, a working board having no analysis and
+no XGID.
+
+**Click routing.** The indices match `MoveEntryState`'s contract:
+
+| Click | Inner callback | Entry does |
+|---|---|---|
+| a point | `OnPointClicked`, 1–24 | `TryAdvanceFrom(point, diePreference)`, then `TryMakePoint(point)` where that is `Illegal` |
+| the bar | `OnBarClicked`, 25 | `TryAdvanceFrom` only: the bar is a source, never a make destination |
+| the tray | `OnTrayClicked`, no index | `TryBearOffMax`, the bear-off-max shortcut |
+| the dice | `OnDiceClicked` | not entry: see below |
+
+A click on a point holding an own checker advances one move from it, the die
+chosen by `diePreference`, the rendered dice order, leftmost first. A point
+holding no own checker falls through to making it, hitting a blot there. The
+producer's own-occupied guard is what lets that dispatch be board-blind, so the
+component never inspects the position. Bearing off one checker is an ordinary
+advance from its home point, not a tray click. Any outcome but `Illegal` redraws
+the board, and `PlayCompleted` fires `OnPlayCompleted`.
+
+**The dice click is display and submit, not entry.** On a complete play it fires
+`OnSubmitRequested`. On an incomplete play it toggles a display-only dice swap (a
+no-op for doubles): the `DiceOrder` the working board draws the roll in, and so
+which die a one-click advance prefers. The incoming `Request` and the
+`MoveEntryState` are untouched, so the swap never disturbs the reset key or
+in-progress entry. The component stays submit-oblivious: it signals, and the host
+already holds the `Play` from `OnPlayCompleted`.
+
+**What a host can see of entry.** `OnPlayCompleted` and `OnSubmitRequested` are
+all it hears, and `UndoLast` and `UndoAll`, called through `@ref`, are all it can
+do; `UndoAll` works after completion too, and a play completed again fires
+`OnPlayCompleted` again. There is no per-click notification and no `CanUndo`
+predicate, and `Request` and `OnSubmitRequested` carry `[EditorRequired]` while
+`OnPlayCompleted` does not (`halheinrich/backgammon#22`).
+
+**Reset: the decision's start, by value.** A fresh `MoveEntryState` is built only
+when the incoming decision's start — its board, by `BoardPosition`'s value
+equality (the one "same position"), and its roll in rolled order — differs from
+the start of the current entry. The component keeps the start board; the roll
+half is the entry state's own `Die1` / `Die2`. The request is still redrawn each
+time, so its options and presentation follow it. This decouples reset from object
+identity: a consumer can rebuild a `DiagramRequest` for any reason (parent-state
+churn, a settings change) without losing mid-click progress.
+
+**Decision-kind guard.** `OnParametersSet` refuses any request but a checker
+play's with an `ArgumentException` whose `ParamName` is `Request`, naming the
+correct composition: the intent is to fail loudly at the contract boundary rather
+than render an unusable widget. It is a run-time refusal because a
+`DiagramRequest` carries its decision as `BgDecisionData`, not its kind, so the
+parameter's type cannot require a checker play; whether it could is
+`halheinrich/backgammon#306`. The kinded records make the routing a compile-time
+fact one step earlier, at the consumer. The cube side needs no such guard:
+`BackgammonCubeActions` takes the `CubeDecision` itself.
+
+### BackgammonCubeActions: the answer row
 
 The answers are the umbrella's `SPEC-scoring.md` §3 as amended on
-`halheinrich/backgammon#326`, whose type is BgDataTypes_Lib's `CubeAnswer`;
-what the fourth answer means, and which of its labels applies at a decision,
-are that section's and that type's to state, not this file's.
-`BackgammonCubeActions` renders one `bg-cube-actions` root that is itself
-the `role="radiogroup"` (`aria-label="Cube decision"`), holding one pill per
-`CubeAnswer` member in the type's declaration order, which the type states is
-the offered order. All four are offered at every decision; the row withholds
-nothing and holds no option table of its own beyond that order. Each pill
-submits its own answer.
+`halheinrich/backgammon#326`, whose type is BgDataTypes_Lib's `CubeAnswer`; what
+the fourth answer means, and which of its labels applies at a decision, are that
+section's and that type's to state. The `bg-cube-actions` root is itself the
+`role="radiogroup"` (`aria-label="Cube decision"`), holding one pill per
+`CubeAnswer` member in declaration order, read once into `OfferedAnswers`. All
+four are offered at every decision.
 
-**Every pill is labelled at its decision, by the label home.** The required
-`Decision` parameter is the `CubeDecision` being answered. Each pill's
-caption is `CubeLabels.Label(answer, Decision)` in BackgammonDiagram_Lib, or
-`CubeLabels.ShortLabel(answer, Decision)` in the short form — the one public
-spelling of a cube answer, full and short. Which label the fourth answer takes
-is the decision's reading of it (`CubeDecision.ClaimOf`), which the label
-home renders. `BackgammonCubeActions` spells no cube wording and reads no
-rule from the decision, so a re-wording or a re-ruling at either home reaches
-this row without an edit to it, and there is no second spelling or
-derivation here to drift from the first.
+**Every pill is labelled at its decision, by the label home.** Each caption is
+`CubeLabels.Label(answer, Decision)`, or `ShortLabel` in the short form. Which
+label the fourth answer takes is the decision's reading (`CubeDecision.ClaimOf`),
+which the label home renders. So a re-wording or a re-ruling at either home
+reaches this row without an edit to it.
 
-**The short form is the host's call.** `SPEC-quiz-view.md` §4 ("The action
-row under quiz navigation") rules when cube labels abbreviate, and what each
-button's tooltip and accessible name are in each form. Only the host knows
-what else shares its row (Submit, the navigation icons, the tail), so the
-host decides: it sets `ShortLabels`, and the row measures nothing and
-guesses no width. Each pill's `title` is the full label in both forms. Each
-radio's `aria-label` follows that section's rule for the form, composed in
-the code-behind (`AccessibleNameOf`) from the label home's `ShortLabel` and
-`Label` at the decision, so the row joins the two labels and spells neither.
-The native radio group is the same group either way. When the host passes
-another decision or the other form,
-every caption, accessible name and tooltip follows at the next render; the
-change selects nothing and fires no `ValueChanged`.
+**The short form is the host's call.** `SPEC-quiz-view.md` §4 ("The action row
+under quiz navigation") rules when cube labels abbreviate, and what each button's
+tooltip and accessible name are in each form. Only the host knows what else
+shares its row, so the host sets `ShortLabels`, and the row measures nothing.
+Each pill's `title` is the full label in both forms. Each radio's `aria-label`
+follows that section's rule, composed in `AccessibleNameOf` from the label home's
+two labels, so the row joins them and spells neither.
 
-Each option is a `<label class="bg-cube-action">` wrapping its own
-`<input type="radio">`; the selected option additionally carries
-`bg-cube-action-selected` for a visible selected state, and an answer
-therefore lights exactly one pill.
+**One markup source for the row and its inert copy.** The pill row's markup is
+one internal template, `PillRow` (with `PillMarkup` for each pill), written in
+`BackgammonCubeActions.razor`. The live row fills in its wiring: on the root, the
+group's role and name and then the host's splat (`GroupWiring`), and in each pill
+its radio (`RadioOf`). `BackgammonCubeActionsRuler` draws every state with the
+same template and no wiring. Scoped CSS reaches only the markup written in its
+own component's file, through the scoped-style attribute the compiler writes onto
+that markup; matching class names would not carry it. Because the template is
+written here, it carries this component's attribute wherever it renders, so this
+stylesheet reaches the copy's pills exactly as it reaches the live row's.
 
-**One markup source for the row and its inert copy.** The pill row's
-markup, the `bg-cube-actions` root and each `bg-cube-action` pill with its
-tooltip and caption, is one internal template, `PillRow` (with `PillMarkup`
-for each pill), written in `BackgammonCubeActions.razor`. The live row draws
-itself with it and fills in its wiring: on the root, the group's role and
-accessible name and then the host's splat (`GroupWiring`), and in each pill
-its radio (`RadioOf`). `BackgammonCubeActionsRuler` draws every state of the
-row with the same template and no wiring. Scoped CSS reaches only the markup
-written in its own component's file, through the scoped-style attribute the
-compiler writes onto that markup; matching class names would not carry it.
-Because the template is written here, it carries this component's attribute
-wherever it renders, so this stylesheet reaches the copy's pills exactly as
-it reaches the live row's, and a change to the pill's look reaches both. The
-live row renders exactly the markup it rendered before the template existed.
+**The radio is hidden, not removed.** Each option is a
+`<label class="bg-cube-action">` wrapping its own `<input type="radio">`, and the
+pill's border, fill and weight are the selected affordance
+(`bg-cube-action-selected`), so the native dot stops being painted. The technique
+is the transparent native control stretched over its own pill
+(`position: absolute; inset: 0; opacity: 0`). The `input` stays rendered,
+focusable and in the accessibility tree, keeping arrow-key roving, mutual
+exclusion by name and the control's accessible name, and it stays the element at
+its own coordinates, so the pill's whole area is its hit target. The keyboard
+focus ring moves from the dot to the pill (`:focus-visible`, on `outline` so it
+cannot widen the row).
 
-The radio itself is **visually hidden but not removed** — the pill's own
-border, fill and weight are the selected affordance, so the native dot stops
-being painted. The technique is the transparent native control stretched
-over its own pill (`position: absolute; inset: 0; opacity: 0`), not the
-sr-only clip recipe. The `input` stays rendered, focusable, and in the
-accessibility tree, keeping native radio-group behavior (arrow-key roving,
-mutual exclusion by name) and the control's accessible name; it also stays
-the element at its own coordinates, so the pill's whole area is the input's
-hit target. The keyboard focus ring moves from the dot to the pill
-(`:focus-visible`, on `outline` so it cannot widen the row).
+**The radio `name` is generated per instance,** since same-name radios are
+mutually exclusive document-wide and a fixed name would cross-link two rows on one
+page. It is internal: address the group by its `aria-label` or the
+`bg-cube-actions` class, and the pills by `bg-cube-action`.
 
-The offered order is `CubeAnswer`'s own, read once from the type
-(`Enum.GetValues<CubeAnswer>()`) into an internal static, `OfferedAnswers`,
-which the inert copy draws its pills in too; it is not a table of the row's.
-No cube caption is spelled anywhere in this repo's component code; the
-code-behind asks `CubeLabels` per pill, at `Decision` (`LivePills`).
-
-The radio `name` is generated per instance — same-name radios are mutually
-exclusive document-wide, so a fixed name would cross-link two rows on one
-page. It is internal; consumers address the group by its `aria-label` or the
-`bg-cube-actions` class.
-
-`AdditionalAttributes` is splatted onto the root `bg-cube-actions` `div`,
-after its class and the group's role and name, so a host attribute of the
-same name wins. Consumers that style the row target `bg-cube-actions`; the
-pills are `bg-cube-action`. The inert copy's rows and pills carry the same
-classes, being the same markup.
-
-**Sizing posture** (deliberate, documented intent): the pills are compact
-and inline-flow-friendly — the root is an inline-flex row that takes only
-its content size and carries no external margins, and each pill's height
-falls out of its own padding + line-height (roughly a standard button's
-height, without encoding any consumer's button metrics). The consumer
-places the row (e.g. inline beside its own buttons) and owns the spacing
+**Sizing posture.** The root is an inline-flex row that takes only its content
+size and carries no external margins, and each pill's height falls out of its own
+padding and line-height, roughly a standard button's without encoding any
+consumer's button metrics. The consumer places the row and owns the spacing
 around it.
 
-The **horizontal** metrics are a measured contract, not free styling. This
-row is the widest element of the consuming quiz page's action row, and at
-its original metrics (0.75rem pill gap, 0.9rem pill inline padding, visible
-radio dot) the original four compound pills totalled 561.6px — they
-out-widened the board and wrapped through the 641–1366px band, adding a line
-of chrome that cost board pixels wherever the board is height-bound. The
-compacted form (0.25rem pill gap, 0.45rem inline padding, hidden dot) took
-them to 396.0px, measured, and the two-group row to 364.8px. The four full
-labels with the fourth reading Too good measure at the same constants, under
-the consumer's 16px Helvetica/Arial stack: pills of 89.3 / 113.9 / 116.0 /
-82.2px, 413.5px in all with three 4px gaps (418.8px with the widest pill,
-Double / Pass, selected, and 419.3px at most over any selection, since
-weight 600 widens the selected caption). The label home's wording is what
-keeps it there: No double spells no implied take, and with a response
-spelled on every pill the same four measured 509.2px. The fourth answer's
-longer label, No double / Pass, and the short form are not recorded here:
-a host measures every state live, under the fonts rendering, from the inert
-copy (`BackgammonCubeActionsRuler`, below).
-Whether the row clears the consumer's one-line contract, and the width at
-which the host switches to the short form, are the consumer's measurements
-to take on its final row (`SPEC-quiz-view.md` §4); these numbers are its
-input. There is one gap, the compacted one: with
-one group there is no inter-group gap and no visible group caption
-(deliberately — the accessible name rides `aria-label`, where it costs no
-pixels). The form is unconditional — no media query gates it, because a
-producer has no view of the consumer's layout to gate one on. Vertical
-metrics were deliberately left alone: 0.5rem block padding + 1.2 line-height
-is the pill's 37px height, which is the tap-target floor. Ruled in the
-umbrella's `SPEC-quiz-view.md` §2 (invariance floor), issue
-`halheinrich/backgammon#99`.
+**The horizontal metrics are constants set against measurement,** not free
+styling. The pills are the widest element of the quiz page's action row. At the
+original metrics that row out-widened the checker row and wrapped through the
+641–1366px band, adding a line of chrome that cost board pixels wherever the board
+is height-bound. Compacting them is the resolution ruled in the umbrella's
+`SPEC-quiz-view.md` §2 (the invariance floor, `halheinrich/backgammon#99`): pill
+gap 0.75rem to 0.25rem, pill inline padding 0.9rem to 0.45rem, the dot hidden. The
+form is unconditional, with no media query, because a producer has no view of the
+consumer's layout to gate one on. With one group there is one gap and no visible
+group caption, which would re-spend the width; the accessible name rides
+`aria-label`, where it costs no pixels.
 
-### BackgammonCubeActions — value contract
+Each figure below is a browser measurement recorded in the commit named, under the
+quiz page's font stack (`7075e32` and `fc0c0a6` state it: 16px Helvetica Neue /
+Helvetica / Arial, at 1x). The scratch pages were not kept, and no test pins a
+width: `CubeActionsCss_KeepsItsMeasuredCompactMetrics` pins the constants. Other
+platforms may resolve wider fallback fonts (`SPEC-quiz-view.md` §2's note on its
+own width figures).
 
-The component is **strictly controlled**. `CubeAnswer? Value` is the
-selected answer or null, and the row renders from it and nothing else — there
-is no component state, because one radio is one whole answer and no partial
-answer exists to hold. `ValueChanged` fires on every selection with the
-chosen answer; it never carries null, and there is no incomplete answer for
-it to fire on. The component never selects on its own, so a consumer that
-binds `ValueChanged` but never writes the answer back never adopts it — the
-selection snaps back to `Value` at its next render pass, its own answer
-field remaining the single source of truth. Clearing between problems is the
-consumer's move: set `Value` to null when advancing. Changing `Decision` or
-`ShortLabels` relabels the pills and leaves the selection to `Value`.
+| The row | Width | Record |
+|---|---|---|
+| four compound pills, original metrics | 561.6px, 56% of a 1001.4px action row | `a152d00`, 2026-08-17 |
+| the same pills, compacted | 396.0px (395.97) | `a152d00` |
+| two groups, since retired | 364.8px | `fc0c0a6`, 2026-09-02 |
+| four pills, a response spelled on every one | 509.2px | `fc0c0a6` |
+| the four full labels, the fourth reading Too good: 89.3 / 113.9 / 116.0 / 82.2px | 413.5px with three 4px gaps; 418.8px with Double / Pass selected; 419.3px at most over any selection (weight 600 widens the selected caption) | `7075e32`, 2026-09-02 |
 
-**Only the four answers can render as selected.** A `Value` outside the four
-`CubeAnswer` members renders nothing selected. That is a caller bug
-surfacing, not a fallback: the row does not remap an undefined answer onto a
-pill.
+The label home's wording is what keeps the row near 413px: No double spells no
+implied take. The fourth answer's longer label, No double / Pass, and the short
+form have no figure here, because a host measures every state live, under the
+fonts rendering, from the inert copy. Whether the row clears the consumer's
+one-line contract, and the width at which the host switches to the short form, are
+the consumer's measurements to take on its final row (`SPEC-quiz-view.md` §4).
 
-**A missing decision is refused.** `Decision` is `[EditorRequired]`, so a
-Razor consumer that omits it surfaces RZ2012; at run time a null `Decision`
-throws `ArgumentNullException` (`ParamName` `Decision`) from
-`OnParametersSet`, since no answer can be labelled without it. The guard
-keeps no state.
+Vertical metrics were deliberately left alone: 0.5rem block padding, a 1.2
+line-height and 1px borders make the pill 37.2px tall (`fc0c0a6`, `7075e32`).
+`a152d00` kept them as a tap-target floor, citing real-tablet touch data that is
+recorded nowhere, and no spec rules a floor. So treat that as an assumption: the
+measured fact is the height, and the reason for keeping it is a judgement.
 
-The component emits the raw answer only; it does not encode which answer is
-correct. What the answer costs at the decision (`CubeDecision.CostOf`) is the
-quiz layer's to ask.
+**Value contract: strictly controlled.** `Value` is the selected answer or null,
+and the row renders from it and nothing else. There is no component state, because
+one radio is one whole answer and no partial answer exists to hold. `ValueChanged`
+fires on every selection, with the chosen answer, and never carries null; it
+re-fires when the selection moves, with no one-shot lock. Changing `Decision` or
+`ShortLabels` relabels the pills at the next render, selecting nothing and firing
+no `ValueChanged`. A null `Decision` throws `ArgumentNullException` (`ParamName`
+`Decision`) from `OnParametersSet`, since no answer can be labelled without it.
 
-### BackgammonCubeActionsRuler — the inert copy
+### BackgammonCubeActionsRuler: the inert copy
 
-The umbrella's `SPEC-quiz-view.md` §4, "One budget from the outset", has a
-host size its action row from one width budget that holds the cube pills at
-their widest, measured under the fonts rendering, before any cube decision
-is on screen; that section states the rule and the chain that meets it. The
-live row cannot supply that width: it is labelled at its decision, and the
-fourth answer's label is that decision's reading.
-`BackgammonCubeActionsRuler` takes no decision. A host renders it and
-measures it.
+The umbrella's `SPEC-quiz-view.md` §4, "One budget from the outset", has a host
+size its action row from one width budget that holds the cube pills at their
+widest, measured under the fonts rendering, before any cube decision is on screen;
+that section states the rule and the chain that meets it. The live row cannot
+supply that width: it is labelled at its decision, and the fourth answer's label
+is that decision's reading. `BackgammonCubeActionsRuler` takes no decision. A host
+renders it and measures it.
 
-**What it draws.** One copy of the row for each state the live row can show
-in the ruler's form (`ShortLabels`, as on the live row). Each state takes one
-spelling of each answer, from every combination of the spellings
-`CubeLabels.Spellings` lists for the offered answers. It is drawn once with
-nothing selected and once with each pill selected in turn, because the
-selected pill is drawn heavier. Today only the fourth answer has two spellings
-(Too good / TG, and No double / Pass / NP), so a form has ten copies. No state
-is assumed to be the widest, and the fonts decide. Every combination is drawn
-because the label home lists what an answer can read, not which readings
-occur together. With one answer of two readings the two sets are the same; if
-more answers had several, the copy could only err wide. Each copy's caption is
-the spelling's short or full label in the form, and its tooltip is the full
-label, as on the live row. The copy chooses that caption from a spelling
-itself, and never the way the live row does, at a decision.
+**What it draws.** One copy of the row for each state the live row can show in the
+ruler's form. Each state takes one spelling of each answer, from every combination
+of the spellings `CubeLabels.Spellings` lists, drawn once with nothing selected and
+once with each pill selected in turn, because the selected pill is drawn heavier.
+Today only the fourth answer has two spellings, so a form has ten copies. No state
+is assumed to be the widest: the fonts decide. Every combination is drawn because
+the label home lists what an answer can read, not which readings occur together;
+if more answers had several, the copy could only err wide.
 
-**What a host measures: the root's width.** The root,
-`div.bg-cube-actions-ruler`, stacks the copies in one column, each at its own
-width (`display: inline-grid; justify-items: start`), so it is exactly as wide
-as the widest copy. Its `width` and `min-width` are both `max-content`, so no
-parent can stretch it past that or shrink it below, and no copy wraps inside
-it, even in a zero-width host. Its height is not a row's, because the copies
-stack. A host that needs both forms renders a ruler for each. It re-measures
-when the fonts load or change, like any live measurement; an observer on the
-root sees every change.
+**What a host measures: the root's width,** for example
+`getBoundingClientRect().width`. The root, `div.bg-cube-actions-ruler`, stacks the
+copies in one column, each at its own width (`display: inline-grid;
+justify-items: start`), so it is exactly as wide as the widest copy. Its `width`
+and `min-width` are both `max-content`, so no parent can stretch or shrink it and
+no copy wraps inside it, even in a zero-width host. A host that needs both forms
+renders a ruler for each. It re-measures when the fonts load or change; an observer
+on the root sees every change.
 
-**The live row's markup and stylesheet.** Each copy is drawn by
-`BackgammonCubeActions`' own `PillRow` template with no wiring (see "One
-markup source" above). It therefore carries that component's scoped-style
-attribute, and every rule of that stylesheet reaches it as it reaches the
-live row: the gap, the pill's padding, border and line-height, and the
-selected weight. The ruler's own stylesheet has one rule, its box, and
-touches no copy.
+**Inert, and its box its own.** The root carries its class, `aria-hidden="true"`
+and `inert`, all written after the host's splat, and its stylesheet keeps it
+unpainted (`visibility: hidden`), which keeps its layout and so its width. Inside
+it there is only the pill row's markup: no input or other control, and no name, id,
+role, tabindex or event handler. So even a browser that ignores `inert` finds
+nothing to focus or click, and nothing joins or shadows the live row's radio group
+when both are on one page. It is still laid out, which is what makes it measurable.
+Keeping it out of the page's flow, clipping it so it cannot widen the page (for
+example inside an absolutely positioned, zero-size, `overflow: hidden` box), and
+placing it where it inherits the live row's fonts are the host's tasks.
 
-**Inert, and its box its own.** The root carries its class,
-`aria-hidden="true"` and `inert`, all written after the host's splat, so no
-host attribute can undo any of them. A host `class` or `style`, in any letter
-case, is not accepted at all: either could only restyle the box whose width is
-the measurement, so it is refused with an `ArgumentException` naming
-`AdditionalAttributes` rather than dropped silently. Its stylesheet keeps it
-unpainted (`visibility: hidden`), which keeps its layout and so its width.
-Inside it there is only the pill row's markup: no input or other control, and
-no name, id, role, tabindex or event handler. So even a browser that ignores
-`inert` finds nothing to focus or click, nothing raises an event, and nothing
-joins or shadows the live row's radio group when both are on one page. It is
-still laid out, which is what makes it measurable. Keeping it out of the
-page's flow, clipping it so it cannot widen the page, and placing it where it
-inherits the live row's fonts are the host's tasks.
+**States it cannot take.** Being inert and unpainted, the copy is never hovered,
+focused or active, so its width is the live row's widest only while those states
+change no geometry: the pitfall "Hover, focus and active change only paint" is
+the rule.
 
-**States it cannot take.** Being inert and unpainted, the copy is never
-hovered, focused or active, so it draws none of those states. Its width is
-therefore the live row's widest only while those states change no geometry:
-a rule keyed to `:hover`, `:focus`, `:focus-visible`, `:focus-within` or
-`:active` may change paint, or repeat what the element already has without
-the state (the selected-and-hovered rule repeats the selected weight), but
-never set a geometry-bearing property to anything else. Pinned by
-`StatesTheCopyCannotTake_ChangeNoGeometry`.
+## Pitfalls
 
-### Bounded-height contract — the board slot
+### BackgammonPlayEntry
 
-`BackgammonPlayEntry` (the one entry wrapper) renders the inner
-`BackgammonDiagram` inside an internal `bg-board-slot` div — the board's
-dedicated flex row. The wrapper's scoped CSS makes the wrapper a flex column
-and the slot the shrinkable row (`min-height: 0`; deliberately the default
-`flex: 0 1 auto`, so the slot shrinks under a bound but never grows). The
-wrapper has no sibling chrome today; the slot keeps the height-cappable
-structure explicit so chrome can join it later (as `flex: none` siblings of
-the slot) without changing the consumer contract. The contract:
-
-- **Bounded:** a consumer that gives the wrapper a *definite* height (a real
-  `height`, or shrinkable-flex-item sizing — see Pitfalls) gets a letterboxed
-  board: the slot shrinks to the bound, its post-flex height becomes
-  definite, and `.bg-diagram`'s own contain-fit default
-  (`max-height: 100%`, auto inline margins) caps the board to it, the width
-  re-deriving through the ratio. The ratio keeps living where it lives today
-  — on `.bg-diagram`, sourced from the viewBox.
-- **Unbounded:** exactly the previous width-driven flow. A column flex with
-  auto height stacks like block flow, the slot never grows, and the
-  contain-fit percentage resolves to none. Validated empirically (live
-  browser, proposed-vs-previous structures pixel-identical).
-
-### Click index conventions
-
-Match `MoveEntryState`'s contract and the inner diagram's event surface:
-
-- `1..24` — regular board points (advance source: a click commits a move from
-  that point via `TryAdvanceFrom`).
-- `25` — on-roll player's bar (advance source / entry, if a bar checker is
-  present).
-
-`OnPointClicked` carries 1–24 and `OnBarClicked` always emits 25 — both routed
-to `TryAdvanceFrom`. `OnTrayClicked` is parameter-less; it is not a click index —
-it routes to `TryBearOffMax` (the bear-off-max shortcut). Bearing off a single
-checker is an ordinary advance from its home point, not a tray click.
-
-### Test project
-
-bUnit + xUnit, targets .NET 10. `BackgammonDiagramTests` cover the view-only
-primitive (markup, hit-region overlay, callback wiring) and the point rects'
-`data-point` identity (present on all 24 and on nothing else, clickable by
-attribute selector, and in agreement with the render order it supersedes),
-and the candidate rows: `rect[data-candidate]` exactly the
-`GetHitRegions` keys with their geometry, absent without a play panel, each
-click reporting its stored index on a decision drawn out of stored order and
-on one with gapped keys, the positional readings unmoved, and the stopped
-propagation against a Blazor ancestor (bUnit dispatches up the ancestors'
-Blazor handlers and honours `stopPropagation`).
-`BackgammonPlayEntryTests`
-cover the play-entry contract, every request built from a checker-play
-record by the producer's `TestRecords`: legal-completion firing, with the
-play reached asserted by identity from the starting position
-(`BoardState.IsSamePlay`), never by its moves; illegal no-ops;
-post-completion no-ops; undo round-trip via replay; the board drawn being
-the request's own `WithWorkingBoard` — at the start, after a click, after a
-dice swap, after undo, and from a re-passed request with new options;
-reset on a changed board or roll, and entry kept across another record or
-request with the same start; the refusal of a cube decision's, a board's
-and a working board's request, naming `Request`; `[EditorRequired]` on
-`Request` and `OnSubmitRequested` by reflection. Three wire tests drive the
-component from `EntryHost`, a parent that binds it through its own render
-tree by parameter name, as compiled Razor does, and renders its handlers'
-state: a completion reaching the parent whose re-render leaves the entry
-complete so the dice click submits through it; the parent advancing
-mid-entry to a new decision; and the parent rebuilding its request
-mid-entry without losing the committed move. `BackgammonCubeActionsTests`
-cover the cube-actions contract, at two decisions built by the producer's
-`TestRecords` that differ only in the gammon fact (money with the cube
-centred, with and without the Jacoby rule):
-
-- **The answers:** one radio group with its accessible name, the root itself
-  the group, four pills in order at both decisions; the fourth reading
-  `Too good` where gammons are possible and `No double / Pass` where they are
-  not, the other three unchanged; and every caption, accessible name and
-  tooltip being the label home's at the decision, in both forms.
-- **The short form:** short captions with the full label as each pill's
-  `title` and each radio's `aria-label` the exact short-form name of every
-  answer at both decisions, still one native group; the full form's name and
-  tooltip the full label; the full form the default, the parameter optional
-  by reflection.
-- **Parameter changes:** another decision (gammons possible to not, and back)
-  and the other form (full to short, and back) relabel the fourth pill's
-  caption, accessible name and tooltip, keep the selected answer selected,
-  and fire no `ValueChanged`.
-- **The value contract:** nothing selected on a null `Value`; `Value` marking
-  exactly its pill (every answer at both decisions); a value outside the four
-  rendering nothing selected (the caller-bug rule, pinned so no fallback
-  creeps in); clearing `Value`; every pill firing once with its own answer
-  (every answer at both decisions, and in the short form); re-firing on a
-  changed selection; the controlled writeback round trip (the `@bind-Value`
-  wiring); and the strictly-controlled rule (a selection without a writeback
-  follows `Value`).
-- **The boundary:** `[EditorRequired]` on `ValueChanged` and `Decision` by
-  reflection; a missing decision refused naming `Decision`; one radio name
-  across the row and distinct names across two rows; splat surface.
-- **Source pins:** the component spells no cube wording (no full or short
-  label literal) and reads no rule (no gammon fact, claim or session member),
-  and the retired surfaces are gone from its source — the claim × response
-  pair, `OfferTooGood` and its producer fact, the option table, and the
-  two-axis row before them (also absent from the rendered row).
-
-The caption assertions are deliberate literals: the component spells none of
-the words itself, and these pins say what a user reads off the row, so a
-re-wording at `CubeLabels` has to arrive here as a deliberate edit. That the
-row asks the label home is pinned separately (the label-home theory and the
-source pin); that the wording itself is right is the label home's own
-suite's job — do not re-source the literals against it.
-Five more cover the compacted pills. One is markup: the radios stay real
-focusable controls (no `hidden` / `aria-hidden` / `disabled` / `tabindex`),
-at both decisions in both forms.
-The other four read the scoped stylesheet as text, since bUnit has no CSS
-engine — the radio is hidden by the transparent-overlay technique rather
-than by `display: none`, a zeroed size, or `clip` (each asserted against);
-the pill keeps a `:focus-visible` outline; the compaction constants and the
-tap-target line-height hold on the one group, with no nested-group rule and
-no media query; and the selected pill keeps all three of its signals (border
-hue, fill, weight). The text-pinning technique is BgQuiz's
-(`MainLayoutTests`' narrow-desktop band); comments are stripped before
-matching — in the C# and Razor sources as well as the stylesheet — so prose
-naming a thing can neither satisfy nor fail an assertion about it.
-`BackgammonCubeActionsRulerTests` cover the inert copy, against the live
-row at the same two decisions (`CubeDecisions`):
-
-- **What it draws:** in each form, one copy for every state of the row and
-  no other: every combination of the label home's spellings, each with
-  nothing selected and with each pill selected, derived from
-  `CubeLabels.Spellings`. A literal pin checks the fourth answer's two
-  readings, selected and not, in both forms; another checks that the full
-  form is the default.
-- **No decision:** its parameters are the form and the splat alone. Its
-  source draws from `CubeLabels.Spellings`, spells no label and labels
-  nothing at a decision, and the live row's source never reads `Spellings`.
-  The two share how a pill is drawn, not how it is captioned.
-- **Inert:** `aria-hidden`, `inert` and the ruler's class on the root,
-  which a host's splat cannot undo, and a host `class` or `style` refused
-  in any letter case, naming `AdditionalAttributes`. Inside it are only rows and pills, carrying a class, a tooltip
-  and the scoped-style attribute and nothing else, and there is no event
-  handler anywhere. Its stylesheet's one rule keeps it unpainted and as wide
-  as its widest copy (read as text).
-- **One source:** for every state of the live row (both decisions, both
-  forms, every value), the copy showing that state is the live row's markup
-  less its wiring, character for character. Every selector of the compiled
-  scoped-CSS bundle reaches each copy element exactly where it reaches the
-  live one. `CompiledStylesheet` reads the bundle through the static web
-  assets manifest the build places beside the test assembly, and AngleSharp
-  matches the selectors, so a rule keyed to the live row's wiring (its role,
-  or its radio's checked state) fails here.
-- **States it cannot take:** for every element of the live row in every
-  state the copy draws, the compiled stylesheet's declared value of each
-  geometry-bearing property is cascaded (AngleSharp's selector specificity,
-  then source order) once with no dynamic state and once with each of
-  `:hover`, `:focus`, `:focus-visible`, `:focus-within` and `:active`
-  holding, and with all of them at once; the two must agree. A state holds
-  by taking its pseudo-class out of each selector. Geometry-bearing is every
-  property but a short list that only paints (colour, background, border
-  colour and radius, outline, shadows, cursor, opacity, visibility,
-  pointer events, user-select, filter, z-index, transitions, text
-  decoration), so an unlisted property fails safe. It compares with the
-  stateless base, so the selected-and-hovered rule, which repeats the
-  selected weight, passes, and the same weight on the plain hover rule
-  fails.
-- **One page:** with a ruler of each form beside it, the live row stays the
-  page's one radio group. Its radios are the only bearers of its name, its
-  markup is what it draws alone, and a selection fires through it once.
-
-`BgDiagRazorTrimPostureTests` holds the one trim-posture pin described under
-"Thin wrapper, by design".
-
-## Public API
-
-All four components live in namespace `BgDiag_Razor.Components`.
-
-### `BackgammonDiagram`
-
-**Parameters:**
-
-- `DiagramRequest? Request` — the position and match state to render. Null
-  renders nothing.
-- `DiagramOptions Options` — rendering options (defaults to `new()`).
-- `Dictionary<string, object>? AdditionalAttributes` — splatted onto the
-  outer wrapper `div`.
-
-**EventCallbacks:**
-
-- `EventCallback<int> OnPointClicked` — fired with point index 1–24.
-- `EventCallback<int> OnBarClicked` — fired with 25.
-- `EventCallback OnTrayClicked` — fired when the on-roll player's bearing-off
-  tray is clicked.
-- `EventCallback OnDiceClicked` — fired when the dice region is clicked
-  (rendered only when a dice hit-region exists, i.e. not for cube decisions).
-  The view forwards the click; it does not interpret it.
-- `EventCallback<int> OnCandidateClicked` — fired with the clicked candidate
-  row's stored index into the decision's plays (the `BoardHitRegions.Candidates`
-  key), under any ranking, ceiling or rescue. Rows exist only on a
-  Solution-mode checker play. The click stops propagating within Blazor's
-  scope only (see the overlay section).
-
-**Sizing contract:** self-sizing via `aspect-ratio` plus a contain-fit
-default — give the containing block one definite dimension for width-driven
-flow, or a definite height to letterbox. See the self-sizing and contain-fit
-pitfalls.
-
-### `BackgammonPlayEntry`
-
-**Parameters:**
-
-- `DiagramRequest? Request` (**required**, `[EditorRequired]`) — the
-  checker-play decision's own request (`DiagramRequest.ForDecision` from a
-  `CheckerPlayDecision`, with any options); entry starts from its record's
-  board and roll, and the board drawn is its `WithWorkingBoard`. Null renders
-  nothing. Any other request — a cube decision's, a board's, a working
-  board's — throws `ArgumentException` (`ParamName` `Request`).
-- `DiagramOptions Options` — forwarded to the inner diagram.
-- `Dictionary<string, object>? AdditionalAttributes` — splatted onto the
-  outer wrapper `div`.
-
-**EventCallbacks:**
-
-- `EventCallback<Play> OnPlayCompleted` — fires once when the click sequence
-  assembles a complete legal `Play` (the entry state's `CompletedPlay`). Does
-  not fire for pass positions or partial / illegal sequences. How the play
-  compares with another is `Play`'s doc comment's to state (BgDataTypes_Lib),
-  not this repo's.
-- `EventCallback OnSubmitRequested` (**required**, `[EditorRequired]`) —
-  parameterless; fires when the user clicks the dice on a *complete* play,
-  signalling submit intent. The component stays submit-oblivious: it only
-  signals (the consumer already holds the `Play` from `OnPlayCompleted`), and
-  the consumer binds this to its own submit action. Marked `[EditorRequired]`
-  so a consumer that forgets to bind it surfaces an `RZ2012` warning rather
-  than silently dropping the submit affordance.
-
-**Imperative methods** (call via `@ref`):
-
-- `void UndoLast()` — undoes the last committed move (no-op if none).
-- `void UndoAll()` — restores the initial position, discarding all committed
-  moves; allowed even after completion (consumer can expose this as
-  "redo from start").
-
-**Sizing contract:** give `bg-play-entry` a definite height to letterbox the
-board (via the internal `bg-board-slot`); leave it unbounded for width-driven
-flow. See "Bounded-height contract" in Architecture and its Pitfalls.
-
-### `BackgammonCubeActions`
-
-**Parameters:**
-
-- `CubeAnswer? Value` — the selected answer, or null when nothing is
-  selected. Strictly controlled: the component never selects on its own.
-  Set to null to clear the row when advancing to a new problem. A value
-  outside the four answers renders nothing selected and is a caller bug.
-- `EventCallback<CubeAnswer?> ValueChanged` (**required**,
-  `[EditorRequired]`) — fires on every selection, carrying the chosen
-  answer. Never carries null; re-fires whenever the selection moves (no
-  one-shot lock). Pairs with `Value` for `@bind-Value`.
-- `CubeDecision Decision` (**required**, `[EditorRequired]`) — the cube
-  decision being answered; every pill is labelled at it through
-  `CubeLabels`, and the row reads nothing else from it. Null throws
-  `ArgumentNullException` (`ParamName` `Decision`).
-- `bool ShortLabels` — the host's choice of the short labels
-  (`SPEC-quiz-view.md` §4); default `false`, the full labels. Each pill's
-  tooltip (`title`) is the full label in both forms; each radio's accessible
-  name (`aria-label`) is as that section rules for the form.
-- `Dictionary<string, object>? AdditionalAttributes` — splatted onto the
-  root `div` (`bg-cube-actions`).
-
-Changing `Decision` or `ShortLabels` relabels the pills at the next render,
-selecting nothing and firing no `ValueChanged`.
-
-No `Request` and no `Options` — the row is board-free. Cube
-consumers render the position separately with `BackgammonDiagram` (which
-letterboxes by itself via its contain-fit default) and place this row in
-their own chrome.
-
-**Imperative methods:** none. Cube decisions have no sub-state worth rolling
-back, so the play-entry-style `UndoLast` / `UndoAll` does not apply.
-
-**Sizing contract:** content-sized, inline-flow-friendly, no external
-margins — see "Sizing posture" in Architecture. The consumer owns placement
-and surrounding spacing.
-
-### `BackgammonCubeActionsRuler`
-
-The cube answer row's inert copy, for a host to measure before any cube
-decision is on screen (`SPEC-quiz-view.md` §4, "One budget from the
-outset"). See "BackgammonCubeActionsRuler — the inert copy" in Architecture.
-
-**Parameters:**
-
-- `bool ShortLabels` — the label form to measure; default `false`, the full
-  labels. The same choice, under the same name, as
-  `BackgammonCubeActions.ShortLabels`; a host that needs both forms renders
-  one ruler for each.
-- `Dictionary<string, object>? AdditionalAttributes` — splatted onto the
-  root `div` (`bg-cube-actions-ruler`), before its own class,
-  `aria-hidden` and `inert`, none of which it can undo. A `class` or a
-  `style`, in any letter case, is not accepted: either could only restyle
-  the box whose width is the measurement, so it throws `ArgumentException`
-  (`ParamName` `AdditionalAttributes`). The way to give the ruler a host's own
-  handle, such as a `data-` attribute.
-
-No decision, no value, no callback: the ruler answers nothing and raises
-no event.
-
-**Imperative methods:** none.
-
-**Measuring contract:** the root's rendered width (e.g.
-`getBoundingClientRect().width`) is the widest the live row can be in the
-form, under the fonts at the ruler's place in the document. The host
-reads nothing else, no copy inside it and not its height. The host places it
-where it inherits the live row's font, keeps it out of the page's flow and
-clipped (for example inside an absolutely positioned, zero-size,
-`overflow: hidden` box), and re-measures when the fonts load or change.
-
-## BackgammonPlayEntry — pitfalls
-
-- **Reset key is the decision's start by value, not record or request
-  identity.** Tests and consumers must pass a decision with a *different*
-  board or roll to force a reset. Re-passing the same start — a freshly
-  built request, or another record on the same board with the same roll —
-  does not reset state. A consumer that wants a fresh entry on the same
-  start calls `UndoAll`.
-- **`UndoLast` / `UndoAll` invoke `StateHasChanged`** which requires the
-  Blazor Dispatcher. Real consumers (button click handlers) are already on
-  the Dispatcher; bUnit tests must wrap the call in `cut.InvokeAsync(...)`.
-- **Pass positions do not auto-fire `OnPlayCompleted`.** When no legal play
-  exists, `MoveEntryState.IsComplete` is true at construction but the
-  component does not emit a synthetic `OnPlayCompleted`. Consumers handle
-  pass positions via their own skip-to-next-problem flow.
-- **Only a checker-play decision's request is entered.** A cube decision's
-  request, a board's, or a working board's throws `ArgumentException` from
-  `OnParametersSet`. Render cube positions with `BackgammonDiagram` and
-  enter the answer with `BackgammonCubeActions`, which takes the
-  `CubeDecision` itself, so its parameter's type is the cube side's guard;
-  the kind branch lives with the consumer, which holds the kinded record.
+- **The reset key is the decision's start by value, not record or request
+  identity.** To force a reset, pass a decision with a different board or roll.
+  Re-passing the same start, in a freshly built request or another record, keeps
+  the entry in progress. A host that wants a fresh entry on the same start calls
+  `UndoAll`, or mounts a fresh component with `@key`, as BgQuiz does per problem,
+  since two problems of a run can share a position.
+- **`UndoLast` and `UndoAll` invoke `StateHasChanged`,** which requires the Blazor
+  Dispatcher. Real consumers (button click handlers) are already on it; bUnit tests
+  must wrap the call in `cut.InvokeAsync(...)`.
+- **A pass position never fires `OnPlayCompleted`, but its dice click submits.**
+  With no legal play, `MoveEntryState.IsComplete` is true at construction. Point,
+  bar and tray clicks are no-ops, no `Play` is reported, and a dice click fires
+  `OnSubmitRequested`, because that is the complete-play branch. A host that can
+  present one handles it itself and does not assume a submit follows a play.
+- **Only a checker-play decision's request is entered.** A cube decision's request,
+  a board's (`DiagramRequest.ForBoard`) or a working board's throws. Render cube
+  positions with `BackgammonDiagram` and take the answer with
+  `BackgammonCubeActions`; the kind branch lives with the consumer.
 - **Never hand the drawn request back in.** The inner diagram's request is a
-  working board's (`WithWorkingBoard`): it presents no decision, so passing
-  it as `Request` is refused, and it would restart entry from a mid-entry
-  board if it were not. Keep the decision's own request as the parameter.
+  working board's: it presents no decision, so passing it as `Request` is refused,
+  and it would restart entry from a mid-entry board if it were not. Keep the
+  decision's own request as the parameter.
 
-## BackgammonCubeActions — pitfalls
+### BackgammonCubeActions
 
-- **`Value == null` means nothing is selected — exactly that.** One radio is
-  one whole answer, so there is no half-answered state and no in-progress
-  selection an answer cannot express. If a submit affordance needs gating,
-  gate it on `Value.HasValue`.
-- **Submission gating is the consumer's, not the row's.** The component has
-  no view of a submit button and does not withhold, warn, or nag about an
-  unanswered row.
-- **Strictly controlled.** A consumer that binds `ValueChanged` but never
-  writes the answer back into `Value` (or doesn't use `@bind-Value`) never
-  adopts the answer: the selection snaps back to `Value` on the next render
-  pass. The consumer's own answer field remains the single source of truth.
-- **Clearing between problems is the consumer's job.** There is no request
-  and no start-keyed reset here — set `Value` to null when advancing to the
-  next problem, or the previous answer stays selected. (With `@bind-Value`,
-  null the bound field.)
-- **`ValueChanged` and `Decision` are `[EditorRequired]`.** Without the
-  binding the row is inert, and without the decision no answer can be
-  labelled; an out-of-date attribute name on a Razor consumer would otherwise
-  splat silently (Razor does not error on unrecognized component
-  attributes). RZ2012 surfaces the omission; build with warnings-as-errors
-  to make that a hard gate. `@bind-Value` satisfies the first. A null
-  `Decision` that reaches run time is refused with `ArgumentNullException`.
-- **`ShortLabels` is optional, and misspelling it fails safe.** Its default
-  is the full form, the ruled default, so it is not `[EditorRequired]`; a
-  misspelt attribute splats silently and leaves the full labels, which can
-  only cost width, never meaning.
-- **Fires on every selection — never with null.** Radios cannot deselect,
-  so the callback never carries null — only the consumer setting
-  `Value = null` clears the row. There is no one-shot lock: a changed
-  selection re-fires. A consumer wanting one-shot semantics advances to the
-  next problem on the first callback.
-- **Never label an answer here, never read a rule, never withhold a pill.**
-  Every caption, accessible name and tooltip is `CubeLabels`' at `Decision`;
-  which label the fourth answer takes is the decision's reading
-  (`CubeDecision.ClaimOf`), rendered by the label home. Switching on the
-  answer, or reading the gammon fact or the session from the decision, would
-  be a second spelling or a second derivation beside the one home. All four
-  answers are offered at every decision (`SPEC-scoring.md` §3); nothing about
-  the row's state or a position withdraws one.
-- **Never decide the short form here.** Whether the row can fit the full
-  labels depends on everything else in the host's row, which this component
-  cannot see; the host measures and sets `ShortLabels`
-  (`SPEC-quiz-view.md` §4). Don't add a width threshold, a media query or a
+- **`Value == null` means nothing is selected, and gating submit is the
+  consumer's.** One radio is one whole answer, so there is no half-answered state.
+  The row has no view of a submit button and does not withhold, warn or nag; gate
+  the button on `Value.HasValue`.
+- **Strictly controlled: write the answer back.** A consumer that binds
+  `ValueChanged` but never writes the answer into `Value` (or doesn't use
+  `@bind-Value`) never adopts it: the selection snaps back at the next render, the
+  consumer's own field remaining the single source of truth. A consumer wanting
+  one-shot semantics advances to the next problem on the first callback.
+- **Clearing between problems is the consumer's job.** There is no request and no
+  start-keyed reset here. Set `Value` to null when advancing (with `@bind-Value`,
+  null the bound field), or the previous answer stays selected.
+- **`ValueChanged` and `Decision` are `[EditorRequired]`; `ShortLabels` is not.**
+  Razor does not error on an unrecognized component attribute, so a misspelt one
+  splats silently. RZ2012 surfaces a missing required parameter, and building with
+  warnings as errors makes that a hard gate; `@bind-Value` satisfies the first. A
+  misspelt `ShortLabels` fails safe: it leaves the full labels, the ruled default,
+  which can only cost width, never meaning.
+- **Never label an answer here, never read a rule, never withhold a pill.** Every
+  caption, accessible name and tooltip is `CubeLabels`' at `Decision`. Switching on
+  the answer, or reading the gammon fact or the session from the decision, would be
+  a second spelling or a second derivation beside the one home, and nothing about
+  the row's state or a position withdraws an answer (`SPEC-scoring.md` §3).
+- **Never decide the short form here.** Whether the row fits depends on everything
+  else in the host's row. Don't add a width threshold, a media query or a
   measurement to the component. Don't drop the full label from `title` or
-  `aria-label` in the short form, and don't drop the visible short label
-  from `aria-label` either: the name must contain the text shown
-  (`SPEC-quiz-view.md` §4).
-- **A `Value` outside the four is a caller bug, not a fallback case.** It
-  renders nothing selected. Don't "help" by remapping such a value onto a
-  neighbouring pill; the tests pin that nothing lights.
-- **Routing by kind is the parameter's type.** The row takes the
-  `CubeDecision` itself, so a checker play cannot reach it; the branch on the
-  record's kind stays the consumer's (`BackgammonPlayEntry` refuses a cube
-  decision's request from its side).
-- **The radio group `name` is internal and instance-unique.** Don't rely on
-  it (it changes per instance by design, so two rows on a page never
-  cross-link browser-native mutual exclusion); select by the
-  `bg-cube-actions` / `bg-cube-action` classes, or by the group's
-  `aria-label`, in tests and styling.
-- **Never hide the radio with `display: none`, `visibility: hidden`, a
-  `hidden` attribute, or a zeroed size.** The dot is hidden by making the
-  native control *transparent and stretched over its own pill*, precisely so
-  it stays focusable, in the accessibility tree, and hit-testable. Every
-  blunt alternative takes it out of the tab order and out of AT's reach,
-  killing native arrow-key roving and the row's accessible names — and the
-  page looks identical either way, so this regresses silently.
-- **Don't "tidy" the hidden radio into the sr-only `clip-path` recipe.** It
-  looks like the more idiomatic way to hide a control and it keeps the
-  accessibility tree correct, so it is the plausible wrong turn here — but
-  `clip-path` clips *hit-testing* as well as painting. Clipped to a 1px box,
-  the input stops being the element at its own centre (`elementFromPoint`
-  returns the label), and anything driving the real control by pointer
-  breaks: measured, it makes Playwright's `CheckAsync` fail its
-  actionability check, which is how the BgQuiz e2e suite answers cube
-  problems. The pill's `:focus-visible` outline is the other half of the
-  affordance: without it a keyboard user has no visible cursor at all. All
-  of this is pinned by tests that read the scoped stylesheet as text (bUnit
-  has no CSS engine).
-- **The row's horizontal metrics are load-bearing at the consumer.** Row
-  gap, pill inline padding, and the hidden dot were compacted against
-  measurement to stop this row out-widening the board and wrapping (see
-  Sizing posture above). Re-widening any of them reopens the wrap; take a
-  fresh measurement first, and don't "restore" the dot for symmetry with
-  some other control. Conversely, don't shave the *block* padding to save
-  more width — that trades a layout win for a tap-target regression.
-- **The pill row's markup is shared with the inert copy: edit it in
-  `PillRow`, and draw both rows from it.** A pill written anywhere else, in
-  another component's file or as the copy's own markup, carries another
-  component's scoped-style attribute or none, and this stylesheet does not
-  reach it, however exactly its class names match. The copy would then
-  measure a different row, and nothing on screen would show it.
-- **Style the pills through their classes, never through the row's
-  wiring.** The copy is the live row's markup less its wiring: no `role` or
-  `aria-label` on the root, no radio in a pill. A rule keyed to the wiring,
-  such as `[role="radiogroup"] .bg-cube-action`, or the selected state
-  written as `.bg-cube-action:has(input:checked)`, reaches the live row
-  alone, so whatever width it sets is missing from the copy's measurement.
-  The selected state is the `bg-cube-action-selected` class for this reason
-  as well. Pinned against the compiled stylesheet.
-- **Hover, focus and active change only paint.** The copy can be neither
-  hovered, focused nor active, so it measures none of those states. A rule
-  keyed to one of them may change paint, or repeat what the element has
-  without the state (as the selected-and-hovered rule repeats the selected
-  weight), but a geometry-bearing declaration that differs from the
-  stateless element (weight, padding, border width, gap) would widen the
-  live row past the budget its host measured.
-  `StatesTheCopyCannotTake_ChangeNoGeometry` enforces this against the
+  `aria-label` in the short form, or the visible short label from `aria-label`: the
+  name must contain the text shown (`SPEC-quiz-view.md` §4).
+- **A `Value` outside the four is a caller bug, not a fallback case.** It renders
+  nothing selected. Don't "help" by remapping it onto a neighbouring pill; the tests
+  pin that nothing lights.
+- **Keep the radio a real control.** Never hide it with `display: none`,
+  `visibility: hidden` or a `hidden` attribute, which take it out of the tab order
+  and out of AT's reach, killing arrow-key roving and the row's accessible names;
+  nor with a zeroed size, which leaves it no hit area. The page looks identical
+  either way, so this regresses silently. The pill's `:focus-visible` outline is the
+  other half of the affordance: without it a keyboard user has no visible cursor.
+- **Don't "tidy" the hidden radio into the sr-only `clip-path` recipe.** It looks
+  more idiomatic and keeps the accessibility tree correct, so it is the plausible
+  wrong turn, but `clip-path` clips hit-testing as well as painting. Clipped to a
+  1px box, the input stops being the element at its own centre (`elementFromPoint`
+  returns the label), and anything driving the real control by pointer breaks. It
+  was tried first and reverted: it made Playwright's `CheckAsync` fail its
+  actionability check, which is how the BgQuiz e2e suite answers cube problems
+  (`a152d00`). The stylesheet tests pin the technique.
+- **The row's horizontal metrics are load-bearing at the consumer.** Re-widening the
+  gap, the inline padding or the dot reopens the wrap, so take a fresh measurement
+  first, and don't "restore" the dot for symmetry with some other control. Don't
+  shave the block padding to save more width either: the compaction was horizontal
+  only, and that would trade a layout win for a smaller tap target.
+- **The pill row's markup is shared: edit it in `PillRow`, and draw both rows from
+  it.** A pill written anywhere else carries another component's scoped-style
+  attribute or none, and this stylesheet does not reach it, however exactly its
+  class names match. The copy would then measure a different row, and nothing on
+  screen would show it.
+- **Style the pills through their classes, never through the row's wiring.** The
+  copy has no `role` or `aria-label` on its root and no radio in a pill. A rule keyed
+  to the wiring, such as `[role="radiogroup"] .bg-cube-action`, or the selected state
+  written as `.bg-cube-action:has(input:checked)`, reaches the live row alone, so
+  whatever width it sets is missing from the copy's measurement. The selected state
+  is the `bg-cube-action-selected` class for this reason as well. Pinned against the
   compiled stylesheet.
+- **Hover, focus and active change only paint.** A rule keyed to `:hover`, `:focus`,
+  `:focus-visible`, `:focus-within` or `:active` may change paint, or repeat what the
+  element has without the state (as the selected-and-hovered rule repeats the
+  selected weight). A geometry-bearing declaration that differs from the stateless
+  element (weight, padding, border width, gap) would widen the live row past the
+  budget its host measured. `StatesTheCopyCannotTake_ChangeNoGeometry` enforces this
+  against the compiled stylesheet.
 
-## BackgammonCubeActionsRuler — pitfalls
+### BackgammonCubeActionsRuler
 
-- **Measure the root, and nothing inside it.** The root's width is the
-  answer. The copies inside it are the row's states in no promised order,
-  and the root's height is not a row's.
-- **Place it where the live row's fonts are.** Like the live row, the copy
-  inherits its font from where it sits; a ruler under other font settings
-  measures another row. Host styles that reach the live row through an
-  ancestor of the host's (e.g. `.action-row .bg-cube-action`) must reach the
-  ruler too, or the two widths part.
-- **Host selectors keyed on the row's classes match the copies too.** The
-  copies carry `bg-cube-actions` and `bg-cube-action`; they must, being the
-  same markup. A host or test that finds the live pills by class scopes its
-  selector to the live row's container, or excludes
-  `.bg-cube-actions-ruler`.
-- **Hide it with clipping, never with `display: none`.** It is already
-  unpainted and inert. `display: none` on it or any ancestor leaves it no
-  box, and every width it reports is zero. Keep it laid out, out of the
-  page's flow, inside a clipping box, so its width cannot widen the page.
-- **It takes no `class` or `style` from a host.** Either could only
-  restyle the box that makes its width the widest copy's, so either is
-  refused with an `ArgumentException`; the ruler's own class is written
-  after the splat besides. Give it a `data-` attribute to find it by.
-  Styling `.bg-cube-actions-ruler` from a host stylesheet would defeat the
-  box the same way; don't.
-- **Never caption the live row from `Spellings`, nor the copy at a
-  decision.** The two rows share how a pill is drawn, not how it is
-  captioned. The live row labels each answer at its decision; the copy draws
-  every spelling and labels nothing. Pinned on both sources.
-- **Nothing in its own stylesheet may reach the copies.** That stylesheet's
-  one rule is the box. A `::deep` rule, or any rule on the copies' rows or
-  pills, would make the copy's geometry differ from the live row's. Pinned.
+- **Measure the root, and nothing inside it.** The copies are the row's states in no
+  promised order, and the root's height is not a row's.
+- **Place it where the live row's fonts are.** Like the live row, the copy inherits
+  its font from where it sits; a ruler under other font settings measures another
+  row. Host styles that reach the live row through an ancestor of the host's (e.g.
+  `.action-row .bg-cube-action`) must reach the ruler too, or the two widths part.
+- **Host selectors keyed on the row's classes match the copies too.** The copies
+  carry `bg-cube-actions` and `bg-cube-action`, being the same markup. A host or test
+  that finds the live pills by class scopes its selector to the live row's container,
+  or excludes `.bg-cube-actions-ruler`.
+- **Hide it with clipping, never with `display: none`.** It is already unpainted and
+  inert. `display: none` on it or any ancestor leaves it no box, and every width it
+  reports is zero.
+- **It takes no `class` or `style` from a host.** Either, in any letter case, could
+  only restyle the box that makes its width the widest copy's, so either is refused
+  with an `ArgumentException` (`ParamName` `AdditionalAttributes`) rather than dropped
+  silently. Give it a `data-` attribute to find it by. Styling
+  `.bg-cube-actions-ruler` from a host stylesheet would defeat the box the same way;
+  don't.
+- **Never caption the live row from `Spellings`, nor the copy at a decision.** The
+  two rows share how a pill is drawn, not how it is captioned. Pinned on both sources.
+- **Nothing in its own stylesheet may reach the copies.** That stylesheet's one rule
+  is the box. A `::deep` rule, or any rule on the copies' rows or pills, would make
+  the copy's geometry differ from the live row's. Pinned.
 
-## BackgammonDiagram — pitfalls
+### BackgammonDiagram and sizing
 
-- **Never interpolate numeric values directly into Razor markup attributes.**
-  Blazor formats interpolated values with the *thread* culture, and WASM adopts
-  the browser locale — so `x="@r.Width"` for `30.8` emits `"30,8"` on an
-  nb-NO browser, an invalid SVG attribute a browser parses as `0` (the bar and
-  the `viewBox` silently break; confirmed in production by a Norway beta
-  tester). Route every geometry number through the lib's culture-invariant
-  formatter: `SvgFormat.Number(value)` for a scalar attribute,
-  `SvgViewBox.ToAttributeString()` for the `viewBox`. This applies to any
-  numeric SVG attribute the overlay writes, not just the ones present today. CSS numbers are a separate case — `_rootStyle`
-  uses `FormattableString.Invariant` because `aspect-ratio` is CSS, not an SVG
-  attribute, and `SvgFormat.Number`'s `"0.##"` rounding would truncate the
-  ratio's precision.
-- **Overlay viewBox must match the lib's SVG.** The overlay is sized from
-  `BoardHitRegions.ViewBox` so hit rects align with the rendered diagram. If
-  the lib's viewBox ever diverges from what `GetHitRegions` reports, clicks
-  will land on the wrong elements. Keep both coming from the same source.
-- **Inner diagram needs `pointer-events: none`.** The rendered lib SVG sits
-  underneath the overlay in a `<div style="pointer-events: none">`. Removing
-  that style makes the diagram swallow clicks before they reach the overlay
-  rects.
-- **Overlay element order is load-bearing.** The transparent hit-region
-  `<svg>` is the second child of the wrapper so it stacks above the diagram.
-  Don't reorder the two children or wrap them separately — overlap and z-order
-  come from DOM order, not CSS positioning alone.
-- **`GetHitRegions` needs `Request`, not just `Options`.** Orientation and
-  on-roll tray positioning depend on match state, not just the option set.
-  `OnParametersSet` passes both; don't "optimize" by caching hit regions
-  keyed on options alone.
-- **`MarkupString` is trusted-output-only.** The SVG injected via
-  `(MarkupString)_svgMarkup` is produced by `BackgammonDiagram_Lib` and is
-  trusted. Never pass externally supplied HTML through `MarkupString` in this
-  component — Blazor skips encoding it, and anything coming from outside the
-  lib would be an XSS vector.
-- **Self-sizing via `aspect-ratio`, not intrinsic pixels.** The `.bg-diagram`
-  root carries `aspect-ratio: <viewBox.Width> / <viewBox.Height>` inline, so a
-  consumer sizes the component by giving it *one* definite dimension — a width
-  **or** a height, via a stretching/sized container (grid track, flex, explicit
-  dimension) — and the box preserves the board's ratio without re-encoding it.
-  The overlay is absolutely positioned at `width/height: 100%`, so it stays
-  covering the box (and thus the visible board, since both share the viewBox)
-  under any consumer sizing. Caveats: (1) it still has no fixed pixel size — a
-  consumer that constrains *neither* dimension gets a zero/ambiguous box, and a
-  consumer that pins *both* (e.g. `width: 100%; height: 100%`) makes
-  `aspect-ratio` a no-op (both definite); (2) passing `style` through
-  `AdditionalAttributes` overrides the inline style and drops the injected
-  ratio *and* the contain-fit default below, so prefer sizing via the
-  container over a `style` splat.
-- **Contain-fit default rides the same inline style.** `.bg-diagram` also
-  carries `max-height: 100%; margin-inline: auto`. When the containing block
-  has a *definite* height, the board caps to it and the width re-derives
-  through the aspect-ratio (CSS transfers the max constraint across the
-  ratio), centering the letterboxed board in its row. In an unbounded flow
-  both declarations are inert — a percentage max-height against an indefinite
-  containing-block height computes to `none`, and the auto margins are zero
-  while the box fills its row — so width-driven consumers (e.g. a plain
-  `max-width` container) are unchanged. The bound must be *definite*: a
-  `max-height` on an auto-height ancestor never reaches the percentage
-  (browsers size flex/block content before clamping, so the content just
-  overflows the clamp — verified empirically). Bound with a real `height`,
-  or make the ancestor a shrinkable flex item (`flex: 1 1 0; min-height: 0`
-  in a definite-height column), never with `max-height` alone. Because the
-  declaration is inline, a consumer stylesheet cannot override it without
-  `!important`; a consumer that genuinely wants overflow instead of
-  contain-fit should size the container, not fight the default.
-
-## Bounded-height contract — pitfalls (`BackgammonPlayEntry`)
-
-- **Bound with a definite height, never `max-height` alone.** A `max-height`
-  on the wrapper (or any auto-height ancestor) does not engage the contract:
-  browsers size flex/block content before applying the clamp, so the content
-  simply overflows it — verified empirically. Bound with a real `height`
-  (e.g. `height: 100%` under a definite-height container) or by making the
-  wrapper a shrinkable flex item (`flex: 1 1 0; min-height: 0` in a
-  definite-height column).
-- **Bound the wrapper; don't style inside the slot.** `bg-board-slot` is
-  stable, public structure, but the supported consumer interaction is
-  bounding the wrapper. Consumer CSS that sets `height`/`flex`/`display` on
-  `.bg-board-slot` replaces the mechanism rather than configuring it — the
-  letterbox is only guaranteed with the producer's values in force.
-- **Never `display: contents` on the wrapper.** The pre-contract consumer
-  glue (dissolving `bg-play-entry` so a percentage `max-height` could reach
-  `.bg-diagram`) now *breaks* the contract if reintroduced: it dissolves the
-  flex column that gives the slot its definite post-flex height. Migrating
-  consumers must delete that glue when adopting the contract.
-
-## Subproject-internal next steps
-
-- **`BackgammonDiagram` highlight parameters.** Add `HighlightedPoints`
-  (set of point indices) and `SelectedPoint` (single index, optional)
-  parameters to the view-only primitive, rendered as translucent overlays
-  using the same `BoardHitRegions` machinery the click overlay already uses.
-  `BackgammonPlayEntry` then forwards `state.LegalNextClicks` (the points you
-  can advance from now) in a one-line plumbing change. Unlocks legal-hint
-  hover and any future point-highlighting consumer in a single small addition. Index→rect mapping stays inside
-  `BackgammonDiagram` where the rest of it lives — no consumer-side leak.
-  History: the original `BackgammonPlayEntry` design carried a
-  `ShowLegalHints` parameter rendering a translucent highlight over each point
-  in `state.LegalNextClicks`; the implementing session minimized the public
-  surface and dropped it. Easy to re-add when consumer demand surfaces — the
-  parameter, an overlay layer in the markup, and tests for the
-  hint-visibility toggle. When it lands, also extend `LegalNextClicks` to
-  surface makeable *destinations*, not only sources (an E2 one-click-entry
-  note — the state exposes source points only today).
-- **Migrate off `MarkupString` injection.** Once `BackgammonDiagram_Lib`
-  exposes a rendering API that emits structured elements rather than a
-  single SVG string, replace the `(MarkupString)` injection with a native
-  Razor SVG tree. Removes the XSS footgun and makes the component
-  diff-friendly.
-- **Fold hit regions into the main SVG.** Once rendering is Razor-native,
-  the click overlay can become additional `<rect>` elements inside the same
-  `<svg>` rather than a parallel absolutely-positioned sibling, eliminating
-  the pointer-events / stacking plumbing.
-- **Verify component layout under the new 16:9 aspect default.** Adapt, or
-  pass `AspectPreset.Natural`, if needed.
-- **One one-liner at the next touch.** `BackgammonPlayEntry.OnPlayCompleted`
-  still lacks `[EditorRequired]`. (Its sibling, the cube guard's exception
-  type, went with the guard's rewrite for the decision kinds: an
-  `ArgumentException` — see "Decision-kind guard".)
+- **Never interpolate a fractional number into a Razor markup attribute.** Blazor
+  formats interpolated values with the thread culture, and WASM adopts the browser
+  locale, so `x="@r.Width"` for `30.8` emits `"30,8"` on an nb-NO browser, an invalid
+  SVG attribute a browser parses as `0`: the bar and the `viewBox` silently break.
+  A Norway beta tester hit this in production (`a635202`, 2026-07-15), and
+  `Overlay_MarkupIsCultureInvariant_UnderCommaDecimalLocale` pins the fix. Route every
+  geometry number through the lib's formatter: `SvgFormat.Number(value)` for a scalar
+  attribute, `SvgViewBox.ToAttributeString()` for the `viewBox`. CSS numbers are a
+  separate case: `_rootStyle` uses `FormattableString.Invariant` because
+  `SvgFormat.Number`'s `"0.##"` rounding would truncate the ratio's precision.
+- **Take the overlay's geometry from `GetHitRegions(Request, Options)`, every
+  render.** Clicks land on the wrong elements if the overlay's viewBox ever diverges
+  from the drawing's. Orientation and on-roll tray positioning depend on match state,
+  not just the options, so don't "optimize" by caching hit regions keyed on options
+  alone.
+- **Keep the drawing's `div` and the overlay as they are: two direct children of the
+  root.** The overlay sits on top because it is absolutely positioned and the
+  drawing's `div` is not, against the root's inline `position: relative`; the `div`'s
+  `pointer-events: none` keeps the drawing out of hit-testing. BgQuiz reads the
+  structure too (`.bg-diagram > div > svg` in its stylesheet, `.bg-diagram > svg` in
+  its e2e), so don't reorder or re-wrap them.
+- **`MarkupString` is trusted-output-only.** The injected SVG is produced by
+  `BackgammonDiagram_Lib`. Never pass externally supplied HTML through it in this
+  component: Blazor skips encoding it, and anything from outside the lib would be an
+  XSS vector.
+- **Give the board one definite dimension, not none and not both.** The box has no
+  fixed pixel size, so a consumer that constrains neither dimension gets a zero or
+  ambiguous box, and one that pins both (e.g. `width: 100%; height: 100%`) makes
+  `aspect-ratio` a no-op.
+- **Size through the container, not a `style` splat.** A host `style` replaces the
+  root's inline style and drops the ratio, the contain-fit default and the overlay's
+  `position: relative`. And because those declarations are inline, a host stylesheet
+  cannot override them without `!important`: a consumer that wants overflow instead of
+  contain-fit sizes the container rather than fighting the default.
+- **Bound with a definite height, never `max-height` alone.** A `max-height` on the
+  wrapper or any auto-height ancestor does not engage the contract (see "What backs
+  the layout claims"). Bound with a real `height`, such as `height: 100%` under a
+  definite-height container, or by making the element a shrinkable flex item
+  (`flex: 1 1 0; min-height: 0` in a definite-height column).
+- **Bound the wrapper; don't style inside the slot.** Consumer CSS that sets
+  `height`, `flex` or `display` on `.bg-board-slot` replaces the mechanism rather than
+  configuring it. The letterbox is only guaranteed with the producer's values in
+  force.
+- **Never `display: contents` on the wrapper.** It dissolves the flex column that
+  gives the slot its definite post-flex height.
